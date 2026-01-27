@@ -2,10 +2,11 @@
 #define _XST_PACK_T_H
 
 #include <stdio.h>
-#include "esp_system.h"
+#include <stdint.h>
 
 #define XST_SYNC_WORD_H                 0xEF
 #define XST_SYNC_WORD_L                 0xAA
+#define XST_SYNC_WORD                   0xEFAA
 
 // 消息ID定义
 #define MID_REPLY                       0x00
@@ -27,22 +28,27 @@
 #define MID_GET_USER_INFO               0x22
 #define MID_GET_ALL_USER_ID             0x24
 #define MID_GET_ALL_USER_INFO           0x25
+#define MID_GET_VERSION                 0x30
 #define MID_QUIT                        0xFF
 
 // 执行结果码定义
-#define MR_SUCCESS                      0
-#define MR_REJECTED                     1
-#define MR_ABORTED                      2
-#define MR_FAILED4_CAMERA               4
-#define MR_FAILED4_UNKNOWN_REASON       5
-#define MR_FAILED4_INVALID_PARAM        6
-#define MR_FAILED4_NO_MEMORY            7
-#define MR_FAILED4_UNKNOWN_USER         8
-#define MR_FAILED4_MAX_USER             9
-#define MR_FAILED4_ENROLLED             10
-#define MR_FAILED4_LIVENESS_CHECK       12
-#define MR_FAILED4_TIME_OUT             13
-#define MR_FAILED4_AUTHORIZATION        14
+typedef enum {
+    MR_SUCCESS = 0,
+    MR_REJECTED = 1,
+    MR_ABORTED = 2,
+    MR_FAILED4_CAMERA = 4,
+    MR_FAILED4_UNKNOWN_REASON = 5,
+    MR_FAILED4_INVALID_PARAM = 6,
+    MR_FAILED4_NO_MEMORY = 7,
+    MR_FAILED4_UNKNOWN_USER = 8,
+    MR_FAILED4_MAX_USER = 9,
+    MR_FAILED4_ENROLLED = 10,
+    MR_FAILED4_LIVENESS_CHECK = 12,
+    MR_FAILED4_TIME_OUT = 13,
+    MR_FAILED4_AUTHORIZATION = 14,
+    MR_FAILED4_READ_FILE = 19,
+    MR_FAILED4_WRITE_FILE = 20
+} xst_result_t;
 
 // 通知ID定义
 #define NID_READY                       0
@@ -51,47 +57,40 @@
 #define NID_OTA_DONE                    3
 #define NID_PALM_STATE                  4
 #define NID_AUTHORIZATION               8
-/************************************master -> XST*****************************************/
-//通用模组接收包，应以此格式包向模组发送数据                                 
-typedef struct {
-    uint8_t SyncWord[2];     
-    uint8_t MsgID;    
-    uint8_t Size[2];   
-    uint8_t *Data;  
-    uint8_t ParityCheck;   
-}xst_pack_t; 
 
-/************************************XST -> master***************************************/
-//////////////////////////////////////////////////////
-//模组回复数据包定义
-typedef struct {
-    uint8_t Result;
-    uint8_t NoteID;
-    uint8_t *data;
-}s_msg_reply_data;
-//模组回复数据协议包定义
-typedef struct {
-    uint8_t SyncWord[2];     
-    uint8_t MsgID;    
-    uint8_t Size[2];   
-    s_msg_reply_data Data;
-    uint8_t ParityCheck; 
-} xst_pack_reply_t;
+// 协议包头结构 
+typedef struct __attribute__((packed)) {
+    uint16_t SyncWord; 
+    uint8_t MsgID;
+    uint16_t Size;     
+} xst_header_t;
 
-//////////////////////////////////////////////////////
-//模组通知数据包定义
-typedef struct {
-    uint8_t nid;
-    uint8_t *data;    
-}s_msg_note_data;
-//模组通知数据协议包定义
-typedef struct {
-    uint8_t SyncWord[2];     
-    uint8_t MsgID;    
-    uint8_t Size[2];   
-    s_msg_note_data Data;
-    uint8_t ParityCheck; 
-} xst_pack_note_t;
-//////////////////////////////////////////////////////
+// 通用Reply数据结构 (Data部分)
+typedef struct __attribute__((packed)) {
+    uint8_t mid;       // 对应的发送命令MsgID
+    uint8_t result;    // 执行结果
+    uint8_t payload[]; // 变长数据
+} xst_reply_body_t;
+
+// 通用Note数据结构 (Data部分)
+typedef struct __attribute__((packed)) {
+    uint8_t nid;       // Note ID
+    uint8_t payload[]; // 变长数据
+} xst_note_body_t;
+
+// 用户信息结构 
+typedef struct __attribute__((packed)) {
+    uint16_t id;
+    uint8_t admin;
+    char name[32];
+} xst_user_info_t;
+
+// 注册参数结构 (用于 ENROLL_SINGLE)
+typedef struct __attribute__((packed)) {
+    uint8_t admin;
+    char user_name[32];
+    uint8_t direction; // Invalid, set 0
+    uint8_t timeout;
+} xst_enroll_param_t;
 
 #endif

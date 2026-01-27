@@ -3,38 +3,26 @@
 
 #include <stdio.h>
 #include <stdint.h>             
-#include <stddef.h>             
-#include "string.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/semphr.h"
-#include "freertos/queue.h"
-#include "esp_system.h"
-#include "esp_log.h"
-#include "driver/gpio.h"
-#include "driver/uart.h"
-
+#include <stddef.h>    
 #include "xst_pack_t.h"
 
 #define XST_TAG         "xst"
 
-#define xst_uart_num    UART_NUM_2
-#define xst_rx_pin      GPIO_NUM_4
-#define xst_tx_pin      GPIO_NUM_6
+#define XST_UART_NUM    UART_NUM_2
+#define XST_TX_PIN      GPIO_NUM_4
+#define XST_RX_PIN      GPIO_NUM_6
+#define XST_BAUD_RATE   115200
 
-/***********************************用户信息******************************************/
-typedef struct {
-    char name[32];
-    int id;
-} User;
-/***********************************柜门状态******************************************/
-typedef enum {
-    LOCKER_FREE = 0,         // 空闲
-    LOCKER_OCCUPIED = 1,     // 占用
-    LOCKER_FAULT = 2,        // 故障
-    LOCKER_RESERVED = 3      // 预留
-} LockerStatus;
+typedef void (*xst_note_callback_t)(uint8_t nid, uint8_t *data, uint16_t len);
 
+void xst_init(xst_note_callback_t callback);
 
-
+xst_result_t xst_cmd_reset(void);
+xst_result_t xst_cmd_get_status(uint8_t *status);
+xst_result_t xst_cmd_enroll_single(const char *name, uint8_t admin, uint8_t timeout, uint16_t *out_user_id);
+xst_result_t xst_cmd_del_user(uint16_t user_id);
+xst_result_t xst_cmd_del_all(void);
+xst_result_t xst_cmd_get_user_count(uint16_t *count);
+xst_result_t xst_cmd_get_user_info(uint16_t query_id, xst_user_info_t *out_info);
+xst_result_t xst_cmd_verify(uint8_t timeout, uint16_t *out_user_id, char *out_name);
 #endif // _XST_H_
