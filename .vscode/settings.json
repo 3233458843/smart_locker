@@ -16,5 +16,6 @@
     "--query-driver=**",
     "--compile-commands-dir=e:\\_esp_code_\\smart_locker\\build"
   ],
-  "idf.flashType": "UART"
+  "idf.flashType": "UART",
+  "idf.currentSetup": "D:/ESP_IDF/Espressif/frameworks/esp-idf-v5.3.3/"
 }
