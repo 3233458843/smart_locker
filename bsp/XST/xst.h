@@ -8,9 +8,9 @@
 
 #define XST_TAG         "xst"
 
-#define XST_UART_NUM    UART_NUM_2
+#define XST_UART_NUM    UART_NUM_1
 #define XST_TX_PIN      GPIO_NUM_4
-#define XST_RX_PIN      GPIO_NUM_6
+#define XST_RX_PIN      GPIO_NUM_5
 #define XST_BAUD_RATE   115200
 
 typedef void (*xst_note_callback_t)(uint8_t nid, uint8_t *data, uint16_t len);
