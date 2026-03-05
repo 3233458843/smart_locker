@@ -50,4 +50,9 @@ esp_lcd_panel_handle_t display_get_panel_handle(void);
  */
 void display_wait_flush_done(void);
 
+/**
+ * @brief 屏幕驱动测试函数，显示彩色块
+ */
+void display_test(void);
+
 #endif // _DISPLAY_H_

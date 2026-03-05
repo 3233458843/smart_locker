@@ -68,7 +68,7 @@ esp_err_t display_init(void){
         .reset_gpio_num = DISPLAY_RESET_PIN,
         .rgb_ele_order = LCD_RGB_ELEMENT_ORDER_RGB, // 视屏幕偏光片而定，如果偏色改为 BGR
         .bits_per_pixel = 16,
-        .data_endian = LCD_RGB_DATA_ENDIAN_BIG,     // ST7789 默认通常是大端模式
+        .data_endian = LCD_RGB_DATA_ENDIAN_LITTLE,     // ST7789 默认通常是大端模式
     };
     ret = esp_lcd_new_panel_st7789(io_handle, &panel_config, &panel_handle);
     if (ret != ESP_OK) return ret;
@@ -78,7 +78,7 @@ esp_err_t display_init(void){
     esp_lcd_panel_init(panel_handle);
     
     // ST7789 的 IPS 屏通常需要反色处理
-    esp_lcd_panel_invert_color(panel_handle, true);
+    esp_lcd_panel_invert_color(panel_handle,false );
     
     // 打开显示
     esp_lcd_panel_disp_on_off(panel_handle, true);
@@ -89,36 +89,36 @@ esp_err_t display_init(void){
 
 esp_err_t backlight_init(void)
 {
-    // // 配置LEDC定时器
-    // ledc_timer_config_t ledc_timer = {
-    //     .duty_resolution = LEDC_TIMER_13_BIT,
-    //     .freq_hz = 5000,
-    //     .speed_mode = LEDC_LOW_SPEED_MODE,
-    //     .timer_num = LEDC_TIMER_0,
-    //     .clk_cfg = LEDC_AUTO_CLK,
-    // };
-    // ledc_timer_config(&ledc_timer);
+    // 配置LEDC定时器
+    ledc_timer_config_t ledc_timer = {
+        .duty_resolution = LEDC_TIMER_13_BIT,
+        .freq_hz = 5000,
+        .speed_mode = LEDC_LOW_SPEED_MODE,
+        .timer_num = LEDC_TIMER_0,
+        .clk_cfg = LEDC_AUTO_CLK,
+    };
+    ledc_timer_config(&ledc_timer);
 
-    // // 配置LEDC通道
-    // ledc_channel.channel = LEDC_CHANNEL_0;
-    // ledc_channel.duty = 0;
-    // ledc_channel.gpio_num = DISPLAY_BACKLIGHT_PIN;
-    // ledc_channel.speed_mode = LEDC_LOW_SPEED_MODE;
-    // ledc_channel.timer_sel = LEDC_TIMER_0;
-    // ledc_channel_config(&ledc_channel);
+    // 配置LEDC通道
+    ledc_channel.channel = LEDC_CHANNEL_0;
+    ledc_channel.duty = 0;
+    ledc_channel.gpio_num = DISPLAY_BACKLIGHT_PIN;
+    ledc_channel.speed_mode = LEDC_LOW_SPEED_MODE;
+    ledc_channel.timer_sel = LEDC_TIMER_0;
+    ledc_channel_config(&ledc_channel);
 
-    // ESP_LOGI(TAG, "Backlight initialized on GPIO%d", DISPLAY_BACKLIGHT_PIN);
-    // return ESP_OK;
-
-    // 退回到最简单的 GPIO 控制，不使用 LEDC(PWM)
-    gpio_reset_pin(DISPLAY_BACKLIGHT_PIN);
-    gpio_set_direction(DISPLAY_BACKLIGHT_PIN, GPIO_MODE_OUTPUT);
-    
-    // 尝试拉高点亮背光。如果还是死黑，请把这里的 1 改成 0 再试一次！
-    gpio_set_level(DISPLAY_BACKLIGHT_PIN, 1); 
-    
-    ESP_LOGI("DISPLAY", "Backlight initialized on GPIO%d (Simple GPIO Mode)", DISPLAY_BACKLIGHT_PIN);
+    ESP_LOGI(TAG, "Backlight initialized on GPIO%d", DISPLAY_BACKLIGHT_PIN);
     return ESP_OK;
+
+    // // 退回到最简单的 GPIO 控制，不使用 LEDC(PWM)
+    // gpio_reset_pin(DISPLAY_BACKLIGHT_PIN);
+    // gpio_set_direction(DISPLAY_BACKLIGHT_PIN, GPIO_MODE_OUTPUT);
+    
+    // // 尝试拉高点亮背光。如果还是死黑，请把这里的 1 改成 0 再试一次！
+    // gpio_set_level(DISPLAY_BACKLIGHT_PIN, 1); 
+    
+    // ESP_LOGI("DISPLAY", "Backlight initialized on GPIO%d (Simple GPIO Mode)", DISPLAY_BACKLIGHT_PIN);
+    // return ESP_OK;
 }
 
 void backlight_set(uint8_t brightness)
@@ -139,4 +139,48 @@ void display_wait_flush_done(void)
     if (lcd_flush_sem) {
         xSemaphoreTake(lcd_flush_sem, portMAX_DELAY);
     }
+}
+
+// 屏幕驱动测试函数
+void display_test(void)
+{
+    // 初始化屏幕和背光
+    if (display_init() != ESP_OK) {
+        ESP_LOGE(TAG, "Display init failed!");
+        return;
+    }
+    if (backlight_init() != ESP_OK) {
+        ESP_LOGE(TAG, "Backlight init failed!");
+        return;
+    }
+    backlight_set(100); // 亮度最大
+
+    esp_lcd_panel_handle_t panel = display_get_panel_handle();
+    if (!panel) {
+        ESP_LOGE(TAG, "Panel handle is NULL!");
+        return;
+    }
+
+    // 定义颜色
+    uint16_t colors[4] = {0xF800, 0x07E0, 0x001F, 0xFFFF}; // 红、绿、蓝、白
+    const char *color_names[4] = {"RED", "GREEN", "BLUE", "WHITE"};
+
+    for (int i = 0; i < 4; ++i) {
+        ESP_LOGI(TAG, "Fill color: %s", color_names[i]);
+        // 填充整个屏幕
+        size_t buf_size = DISPLAY_WIDTH * DISPLAY_HEIGHT * sizeof(uint16_t);
+        uint16_t *buf = heap_caps_malloc(buf_size, MALLOC_CAP_DMA);
+        if (!buf) {
+            ESP_LOGE(TAG, "DMA buffer alloc failed!");
+            return;
+        }
+        for (int p = 0; p < DISPLAY_WIDTH * DISPLAY_HEIGHT; ++p) {
+            buf[p] = colors[i];
+        }
+        esp_lcd_panel_draw_bitmap(panel, 0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, buf);
+        display_wait_flush_done();
+        vTaskDelay(pdMS_TO_TICKS(800));
+        heap_caps_free(buf);
+    }
+    ESP_LOGI(TAG, "Display test finished.");
 }

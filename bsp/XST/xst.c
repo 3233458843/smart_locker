@@ -1,31 +1,108 @@
 #include "xst.h"
 #include <string.h>
+#include <stdlib.h>
 #include "esp_log.h"
 #include "driver/uart.h"
 #include "driver/gpio.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/semphr.h"
 
-// 内部使用的命令回复队列
+// ---------------- 核心通信与任务同步资源 ----------------
+// 内部使用的命令回复队列 (供业务API阻塞等待结果)
 static QueueHandle_t xst_reply_queue = NULL;
-// 外部注册的回调函数
+// 外部注册的主动通知回调函数
 static xst_note_callback_t g_note_callback = NULL;
 
-// 串口缓冲区
-#define RX_BUF_SIZE 2048 // 增大缓冲区以支持获取所有用户列表或图片
-static uint8_t rx_data_buffer[RX_BUF_SIZE];
+// 接收缓冲（滑动窗口解析用）
+#define PARSE_BUF_SIZE 4096 
+static uint8_t parse_buf[PARSE_BUF_SIZE];
+static uint32_t parse_len = 0;
+
+//解析任务相关的二值信号量和资源锁
+static SemaphoreHandle_t xst_parse_sem = NULL;     // 二值信号量，用于唤醒解析任务
+static SemaphoreHandle_t xst_list_mutex = NULL;    // 互斥锁，用于保护待解析数据链表
+
+//待解析帧的数据节点链表
+typedef struct parse_item {
+    uint8_t msg_id;
+    uint16_t data_len;
+    uint8_t *payload;
+    struct parse_item *next;
+} parse_item_t;
+
+static parse_item_t *parse_list_head = NULL;
+static parse_item_t *parse_list_tail = NULL;
+
+// 定义用于 reply 队列传输的内部结构
+typedef struct {
+    uint16_t len;
+    uint8_t *data; // 指向堆内存，接收方需释放
+} queue_item_t;
 
 /*******************************************************************************
- *                               内部辅助函数
+ *                               内部辅助与字典翻译函数
  ******************************************************************************/
-/**
- * @brief 计算校验和
- * 协议: ParityCheck 为整条协议除去 Sync Word 部分后，其余字节按位做 XOR 运算。
- * 包括 MsgID, Size(2 bytes), Data(N bytes)
- */
+
+// 获取 MsgID 对应的字符串
+static const char* xst_get_mid_str(uint8_t mid) {
+    switch(mid) {
+        case MID_REPLY: return "REPLY (命令回复)";
+        case MID_NOTE: return "NOTE (主动通知)";
+        case MID_IMAGE: return "IMAGE (图片数据)";
+        case MID_LOG: return "LOG (日志)";
+        case MID_RESET: return "RESET (复位)";
+        case MID_GETSTATUS: return "GET_STATUS (获取状态)";
+        case MID_VERIFY: return "VERIFY (验证/识别)";
+        case MID_ENROLL: return "ENROLL (录入)";
+        case MID_ENROLL_SINGLE: return "ENROLL_SINGLE (单次录入)";
+        case MID_DEL_USER: return "DEL_USER (删除用户)";
+        case MID_DEL_ALL: return "DEL_ALL (清空用户)";
+        case MID_GET_ALL_USER_ID: return "GET_ALL_USER_ID (获取总数)";
+        case MID_GET_USER_INFO: return "GET_USER_INFO (获取信息)";
+        case MID_QUIT: return "QUIT (退出)";
+        default: return "UNKNOWN_CMD (未知指令)";
+    }
+}
+
+// 获取 Result 对应的字符串
+static const char* xst_get_result_str(uint8_t res) {
+    switch(res) {
+        case MR_SUCCESS: return "成功 (SUCCESS)";
+        case MR_REJECTED: return "被拒绝 (REJECTED)";
+        case MR_ABORTED: return "已终止 (ABORTED)";
+        case MR_FAILED4_CAMERA: return "相机故障 (CAMERA_ERR)";
+        case MR_FAILED4_UNKNOWN_REASON: return "未知错误 (UNKNOWN_ERR)";
+        case MR_FAILED4_INVALID_PARAM: return "参数无效 (INVALID_PARAM)";
+        case MR_FAILED4_NO_MEMORY: return "内存不足 (NO_MEMORY)";
+        case MR_FAILED4_UNKNOWN_USER: return "未登记用户 (UNKNOWN_USER)";
+        case MR_FAILED4_MAX_USER: return "用户已满 (MAX_USER)";
+        case MR_FAILED4_ENROLLED: return "用户已存在 (ENROLLED)";
+        case MR_FAILED4_LIVENESS_CHECK: return "活体检测失败 (LIVENESS_CHECK)";
+        case MR_FAILED4_TIME_OUT: return "超时 (TIME_OUT)";
+        default: return "其他错误 (OTHER_ERROR)";
+    }
+}
+
+// 获取 NID (Note ID) 对应的字符串
+static const char* xst_get_nid_str(uint8_t nid) {
+    switch(nid) {
+        case NID_READY: return "READY (模组已准备好)";
+        case NID_FACE_STATE: return "FACE_STATE (人脸状态更新)";
+        case NID_UNKNOWNERROR: return "UNKNOWNERROR (硬件异常)";
+        case NID_OTA_DONE: return "OTA_DONE (升级完成)";
+        case NID_PALM_STATE: return "PALM_STATE (掌静脉状态更新)";
+        case NID_AUTHORIZATION: return "AUTHORIZATION (授权相关)";
+        default: return "UNKNOWN_NOTE (未知通知)";
+    }
+}
+
+// 计算校验和
 static uint8_t xst_calc_checksum(uint8_t msg_id, uint16_t size, uint8_t *data) {
     uint8_t checksum = 0;
     checksum ^= msg_id;
-    checksum ^= (uint8_t)(size >> 8);   // Size High
-    checksum ^= (uint8_t)(size & 0xFF); // Size Low
+    checksum ^= (uint8_t)(size >> 8);
+    checksum ^= (uint8_t)(size & 0xFF);
     if (data != NULL && size > 0) {
         for (int i = 0; i < size; i++) {
             checksum ^= data[i];
@@ -34,306 +111,264 @@ static uint8_t xst_calc_checksum(uint8_t msg_id, uint16_t size, uint8_t *data) {
     return checksum;
 }
 
-/**
- * @brief 底层发送数据包
- */
+/*******************************************************************************
+ *                               发送底层封装 (带打印功能)
+ ******************************************************************************/
 static void xst_send_packet(uint8_t msg_id, uint8_t *data, uint16_t len) {
-    uint8_t header[5];
-    uint8_t checksum;
-    
-    header[0] = XST_SYNC_WORD_H; 
-    header[1] = XST_SYNC_WORD_L; 
-    header[2] = msg_id;
-    header[3] = (uint8_t)(len >> 8);
-    header[4] = (uint8_t)(len & 0xFF);
-    
-    checksum = xst_calc_checksum(msg_id, len, data);
-
-    // ===== 打印发送包头 =====
-    ESP_LOGI(XST_TAG, "=== PACKET SENDING ===");
-    ESP_LOGI(XST_TAG, "Raw Header: %02X %02X %02X %02X %02X", 
-             header[0], header[1], header[2], header[3], header[4]);
-    
-    ESP_LOGI(XST_TAG, "✓ Sync Word: 0x%04X", (header[0] << 8) | header[1]);
-    
-    // 解析 MsgID 名称
-    const char *msg_name = "UNKNOWN";
-    switch(msg_id) {
-        case MID_RESET: msg_name = "MID_RESET"; break;
-        case MID_GETSTATUS: msg_name = "MID_GETSTATUS"; break;
-        case MID_VERIFY: msg_name = "MID_VERIFY"; break;
-        case MID_ENROLL: msg_name = "MID_ENROLL"; break;
-        case MID_ENROLL_SINGLE: msg_name = "MID_ENROLL_SINGLE"; break;
-        case MID_DEL_USER: msg_name = "MID_DEL_USER"; break;
-        case MID_DEL_ALL: msg_name = "MID_DEL_ALL"; break;
-        case MID_GET_USER_INFO: msg_name = "MID_GET_USER_INFO"; break;
-        case MID_GET_ALL_USER_ID: msg_name = "MID_GET_ALL_USER_ID"; break;
-        case MID_GET_ALL_USER_INFO: msg_name = "MID_GET_ALL_USER_INFO"; break;
-        case MID_GET_VERSION: msg_name = "MID_GET_VERSION"; break;
+    uint32_t total_len = 5 + len + 1; // 5字节头 + 载荷 + 1字节校验
+    uint8_t *tx_buf = malloc(total_len);
+    if (!tx_buf) {
+        ESP_LOGE(XST_TAG, "TX Buffer Malloc Failed");
+        return;
     }
     
-    ESP_LOGI(XST_TAG, "  MsgID: 0x%02X (%s)", msg_id, msg_name);
-    ESP_LOGI(XST_TAG, "  DataLen: %d bytes", len);
+    // 组装协议头
+    tx_buf[0] = XST_SYNC_WORD_H; 
+    tx_buf[1] = XST_SYNC_WORD_L; 
+    tx_buf[2] = msg_id;
+    tx_buf[3] = (uint8_t)(len >> 8);
+    tx_buf[4] = (uint8_t)(len & 0xFF);
     
-    // ===== 打印发送数据体 =====
+    // 组装数据区
     if (len > 0 && data != NULL) {
-        ESP_LOGI(XST_TAG, "=== RAW DATA PAYLOAD ===");
-        ESP_LOG_BUFFER_HEX(XST_TAG, data, len);
-        
-        // 如果是特定命令，进行语义解析
-        if (msg_id == MID_ENROLL_SINGLE && len >= 35) {
-            xst_enroll_param_t *param = (xst_enroll_param_t *)data;
-            ESP_LOGI(XST_TAG, "  ↳ Enroll Params:");
-            ESP_LOGI(XST_TAG, "     - admin: %d", param->admin);
-            ESP_LOGI(XST_TAG, "     - user_name: %.32s", param->user_name);
-            ESP_LOGI(XST_TAG, "     - timeout: %d sec", param->timeout);
-        } 
-        else if (msg_id == MID_VERIFY && len >= 2) {
-            ESP_LOGI(XST_TAG, "  ↳ Verify Params:");
-            ESP_LOGI(XST_TAG, "     - pd_rightaway: %d", data[0]);
-            ESP_LOGI(XST_TAG, "     - timeout: %d sec", data[1]);
-        }
-        else if (msg_id == MID_DEL_USER && len >= 2) {
-            uint16_t user_id = ((uint16_t)data[0] << 8) | data[1];
-            ESP_LOGI(XST_TAG, "  ↳ Delete User ID: %d", user_id);
-        }
+        memcpy(&tx_buf[5], data, len);
     }
-
-    ESP_LOGI(XST_TAG, "  Checksum: 0x%02X", checksum);
     
-    // ===== 完整数据包显示 =====
-    ESP_LOGI(XST_TAG, "=== COMPLETE PACKET ===");
-    uint8_t *full_packet = malloc(len + 6);
-    if (full_packet) {
-        memcpy(full_packet, header, 5);
-        if (len > 0 && data != NULL) {
-            memcpy(full_packet + 5, data, len);
-        }
-        full_packet[len + 5] = checksum;
-        ESP_LOG_BUFFER_HEX(XST_TAG, full_packet, len + 6);
-        free(full_packet);
-    }
+    // 计算并写入校验和
+    tx_buf[total_len - 1] = xst_calc_checksum(msg_id, len, data);
 
-    // 3. 发送 UART
-    uart_write_bytes(XST_UART_NUM, (const char*)header, 5);
-    if (len > 0 && data != NULL) {
-        uart_write_bytes(XST_UART_NUM, (const char*)data, len);
-    }
-    uart_write_bytes(XST_UART_NUM, (const char*)&checksum, 1);
-    
-    ESP_LOGI(XST_TAG, "=== END OF SENDING ===\n");
+    // [功能1] 打印发送的原始 HEX 数据
+    ESP_LOGI(XST_TAG, "\n>>>>>>>>>>>>>>>>>>>>>>> [ UART 发送 ] >>>>>>>>>>>>>>>>>>>>>>>");
+    ESP_LOGI(XST_TAG, "=> 发送指令: %s (0x%02X), 载荷长: %d, 总长: %d 字节", xst_get_mid_str(msg_id), msg_id, len, (int)total_len);
+    esp_log_buffer_hex(XST_TAG "-TX", tx_buf, total_len);
+    ESP_LOGI(XST_TAG, ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>");
+
+    uart_write_bytes(XST_UART_NUM, (const char*)tx_buf, total_len);
+    free(tx_buf);
 }
-
-/**
- * @brief 发送命令并等待特定回复 (同步阻塞)
- * @param cmd_id 发送的命令ID
- * @param send_data 发送的数据payload
- * @param send_len 发送长度
- * @param out_reply_data 用于接收回复数据的缓冲区指针
- * @param out_reply_len 接收到的数据长度
- * @param timeout_ms 超时时间
- */
-static xst_result_t xst_transact(uint8_t cmd_id, uint8_t *send_data, uint16_t send_len, 
-                                 uint8_t **out_reply_data, uint16_t *out_reply_len, uint32_t timeout_ms) {
-    
-    // 1. 清空队列中可能存在的旧数据
-    xQueueReset(xst_reply_queue);
-
-    // 2. 发送指令
-    xst_send_packet(cmd_id, send_data, send_len);
-
-    // 3. 等待回复
-    xst_reply_body_t *reply_packet = NULL;
-    if (xQueueReceive(xst_reply_queue, &reply_packet, pdMS_TO_TICKS(timeout_ms)) == pdTRUE) {
-        if (reply_packet->mid == cmd_id) {
-            xst_result_t res = (xst_result_t)reply_packet->result;          
-            if (out_reply_data != NULL) {
-                *out_reply_data = reply_packet->payload; // 这里的 payload 指针指向 malloc 块内部
-            }
-           
-            free(reply_packet); // 暂时释放，具体函数逻辑见下文接收任务
-            return res;
-        } else {
-            free(reply_packet);
-            ESP_LOGW(XST_TAG, "Reply ID mismatch: expected %02X, got %02X", cmd_id, reply_packet->mid);
-            return MR_FAILED4_UNKNOWN_REASON;
-        }
-    }
-
-    ESP_LOGE(XST_TAG, "Wait reply timeout");
-    return MR_FAILED4_TIME_OUT;
-}
-
-// 定义用于队列传输的内部结构
-typedef struct {
-    uint16_t len;
-    uint8_t *data; // 指向堆内存，接收方需释放
-} queue_item_t;
 
 /*******************************************************************************
- *                               接收任务
+ *                               解析与分发业务逻辑
  ******************************************************************************/
 
-static void xst_uart_task(void *param) {
-    xst_header_t header;
-    uint8_t checksum_byte;
-    uint8_t *body_buf = NULL;
+// 解析具象化内容并打印
+static void xst_print_parsed_frame(uint8_t msg_id, uint16_t data_len, uint8_t *payload) {
+    ESP_LOGI(XST_TAG, "=> [解析详情] 指令类型: 0x%02X (%s), 载荷长度: %d 字节", msg_id, xst_get_mid_str(msg_id), data_len);
 
-    while (1) {
-        // 1. 读取包头 (5 Bytes)
-        int read_len = uart_read_bytes(XST_UART_NUM, &header, sizeof(xst_header_t), pdMS_TO_TICKS(20));
-        
-        if (read_len != sizeof(xst_header_t)) {
-            continue; // 继续等待
+    if (msg_id == MID_REPLY) {
+        if (data_len >= 2) {
+            uint8_t reply_mid = payload[0];
+            uint8_t result = payload[1];
+            ESP_LOGI(XST_TAG, "   [内容] 此帧为响应包 -> 对应的发起命令: 0x%02X (%s)", reply_mid, xst_get_mid_str(reply_mid));
+            ESP_LOGI(XST_TAG, "   [内容] 执行结果状态: %d (%s)", result, xst_get_result_str(result));
         }
-
-        uint8_t *p_head = (uint8_t*)&header;
-        
-        // ===== 打印原始包头 =====
-        ESP_LOGI(XST_TAG, "=== RAW HEADER RECEIVED ===");
-        ESP_LOGI(XST_TAG, "Raw bytes: %02X %02X %02X %02X %02X", 
-                 p_head[0], p_head[1], p_head[2], p_head[3], p_head[4]);
-        
-        if (p_head[0] != XST_SYNC_WORD_H || p_head[1] != XST_SYNC_WORD_L) {
-            // 同步字错误，丢弃当前数据并继续等待
-            ESP_LOGW(XST_TAG, "❌ Sync word mismatch: expected %02X%02X, got %02X%02X", 
-                     XST_SYNC_WORD_H, XST_SYNC_WORD_L, p_head[0], p_head[1]);
-            uart_flush_input(XST_UART_NUM); // 丢弃当前缓冲区数据
-            continue;
+    } 
+    else if (msg_id == MID_NOTE) {
+        if (data_len >= 1) {
+            uint8_t nid = payload[0];
+            ESP_LOGI(XST_TAG, "   [内容] 此帧为主板通知包 -> 发生事件: %d (%s)", nid, xst_get_nid_str(nid));
         }
-        
-        uint8_t msg_id = p_head[2];
-        uint16_t data_len = (uint16_t)p_head[3] << 8 | p_head[4];
-        
-        // ===== 打印包头解析结果 =====
-        ESP_LOGI(XST_TAG, "✓ Sync Word: 0x%04X", (p_head[0] << 8) | p_head[1]);
-        ESP_LOGI(XST_TAG, "  MsgID: 0x%02X", msg_id);
-        ESP_LOGI(XST_TAG, "  DataLen: %d bytes", data_len);
+    } 
+    else if (msg_id == MID_IMAGE) {
+        ESP_LOGI(XST_TAG, "[内容] 此帧为大图/流媒体传输...");
+    } 
+    else {
+        ESP_LOGI(XST_TAG, "   [内容] 其他上报数据");
+    }
+}
 
-        // 2. 读取数据体
-        if (data_len > RX_BUF_SIZE) {
-            ESP_LOGE(XST_TAG, "❌ Packet too large: %d (max: %d)", data_len, RX_BUF_SIZE);
-            uart_flush_input(XST_UART_NUM);
-            continue;
-        }
-
-        if (data_len > 0) {
-            body_buf = malloc(data_len);
-            if (body_buf == NULL) {
-                ESP_LOGE(XST_TAG, "❌ Memory allocation failed");
-                uart_flush_input(XST_UART_NUM);
-                continue;
-            }
-            int body_read = uart_read_bytes(XST_UART_NUM, body_buf, data_len, pdMS_TO_TICKS(50));
-            if (body_read != data_len) {
-                ESP_LOGW(XST_TAG, "❌ Data read incomplete: expected %d, got %d", data_len, body_read);
-                free(body_buf);
-                continue;
-            }
-            
-            // ===== 打印原始数据体 =====
-            ESP_LOGI(XST_TAG, "=== RAW DATA BODY ===");
-            ESP_LOG_BUFFER_HEX(XST_TAG, body_buf, data_len);
-        }
-
-        // 3. 读取校验位
-        uart_read_bytes(XST_UART_NUM, &checksum_byte, 1, pdMS_TO_TICKS(10));
-        ESP_LOGI(XST_TAG, "  Checksum: 0x%02X", checksum_byte);
-
-        // 4. 验证校验
-        uint8_t cal_sum = xst_calc_checksum(msg_id, data_len, body_buf);
-        if (cal_sum != checksum_byte) {
-            ESP_LOGE(XST_TAG, "❌ Checksum failed: calculated 0x%02X, received 0x%02X", cal_sum, checksum_byte);
-            if (body_buf) free(body_buf);
-            continue;
-        }
-        ESP_LOGI(XST_TAG, "✓ Checksum verified");
-
-        // 5. 分发处理 + 详细解析
-        ESP_LOGI(XST_TAG, "=== FRAME PARSING ===");
-        
-        if (msg_id == MID_REPLY) {
-            ESP_LOGI(XST_TAG, "📨 Frame Type: REPLY (0x%02X)", MID_REPLY);
-            
-            if (data_len >= 2) {
-                uint8_t reply_mid = body_buf[0];
-                uint8_t reply_result = body_buf[1];
-                uint16_t payload_len = data_len - 2;
-                
-                ESP_LOGI(XST_TAG, "  ↳ Reply to MID: 0x%02X", reply_mid);
-                ESP_LOGI(XST_TAG, "  ↳ Result Code: %d (%s)", reply_result, 
-                         reply_result == 0 ? "SUCCESS" : "FAILED");
-                ESP_LOGI(XST_TAG, "  ↳ Payload Length: %d bytes", payload_len);
-                
-                if (payload_len > 0) {
-                    ESP_LOGI(XST_TAG, "  ↳ Payload Data:");
-                    ESP_LOG_BUFFER_HEX(XST_TAG, body_buf + 2, payload_len);
-                }
-                
+// 分发给上层应用
+static void xst_dispatch_frame(uint8_t msg_id, uint16_t data_len, uint8_t *payload) {
+    if (msg_id == MID_REPLY) {
+        if (data_len >= 2) {
+            uint8_t *body_buf = malloc(data_len);
+            if (body_buf != NULL) {
+                memcpy(body_buf, payload, data_len);
                 queue_item_t item;
                 item.len = data_len;
-                item.data = body_buf;
-                
+                item.data = body_buf; // 移交所有权给业务队列
                 if (xQueueSend(xst_reply_queue, &item, 0) != pdTRUE) {
-                    ESP_LOGW(XST_TAG, "⚠️  Queue full, dropping reply");
-                    free(body_buf);
-                }
-                body_buf = NULL;
-            } else {
-                ESP_LOGW(XST_TAG, "❌ Invalid reply frame (too short)");
-                if(body_buf) free(body_buf);
-            }
-        } 
-        else if (msg_id == MID_NOTE) {
-            ESP_LOGI(XST_TAG, "📢 Frame Type: NOTE (0x%02X)", MID_NOTE);
-            
-            if (data_len >= 1) {
-                uint8_t nid = body_buf[0];
-                uint16_t note_data_len = data_len - 1;
-                
-                const char *note_name = "UNKNOWN";
-                switch(nid) {
-                    case NID_READY: note_name = "NID_READY"; break;
-                    case NID_FACE_STATE: note_name = "NID_FACE_STATE"; break;
-                    case NID_UNKNOWNERROR: note_name = "NID_UNKNOWNERROR"; break;
-                    case NID_OTA_DONE: note_name = "NID_OTA_DONE"; break;
-                    case NID_PALM_STATE: note_name = "NID_PALM_STATE"; break;
-                    case NID_AUTHORIZATION: note_name = "NID_AUTHORIZATION"; break;
-                }
-                
-                ESP_LOGI(XST_TAG, "  ↳ Note ID: 0x%02X (%s)", nid, note_name);
-                ESP_LOGI(XST_TAG, "  ↳ Note Data Length: %d bytes", note_data_len);
-                
-                if (note_data_len > 0) {
-                    ESP_LOGI(XST_TAG, "  ↳ Note Data:");
-                    ESP_LOG_BUFFER_HEX(XST_TAG, body_buf + 1, note_data_len);
-                }
-                
-                if (g_note_callback) {
-                    g_note_callback(nid, body_buf + 1, note_data_len);
+                    free(body_buf); 
                 }
             }
-            if(body_buf) free(body_buf);
         }
-        else if (msg_id == MID_IMAGE) {
-            ESP_LOGI(XST_TAG, "🖼️  Frame Type: IMAGE (0x%02X)", MID_IMAGE);
-            ESP_LOGI(XST_TAG, "  ↳ Image Data Length: %d bytes", data_len);
-            if(body_buf) free(body_buf);
+    } 
+    else if (msg_id == MID_NOTE) {
+        if (g_note_callback && data_len >= 1) {
+            uint8_t nid = payload[0];
+            g_note_callback(nid, payload + 1, data_len - 1);
         }
-        else {
-            ESP_LOGW(XST_TAG, "❓ Frame Type: UNKNOWN (0x%02X)", msg_id);
-            ESP_LOGI(XST_TAG, "  ↳ Data Length: %d bytes", data_len);
-            if(body_buf) free(body_buf);
-        }
-        
-        ESP_LOGI(XST_TAG, "=== END OF FRAME ===\n");
-
-        vTaskDelay(pdMS_TO_TICKS(10)); // 小延时，避免任务饥饿
     }
 }
 
 /*******************************************************************************
- *                               API 实现
+ *               任务2：解析任务 (由二值信号量唤醒)
+ ******************************************************************************/
+static void xst_parse_task(void *param) {
+    while (1) {
+        // [功能3] 等待二值信号量被释放 (阻塞态，不耗CPU)
+        if (xSemaphoreTake(xst_parse_sem, portMAX_DELAY) == pdTRUE) {
+            
+            // 循环取出链表中所有的待解析帧
+            while (1) {
+                parse_item_t *item = NULL;
+
+                // 加锁取出一个节点
+                xSemaphoreTake(xst_list_mutex, portMAX_DELAY);
+                if (parse_list_head != NULL) {
+                    item = parse_list_head;
+                    parse_list_head = item->next;
+                    if (parse_list_head == NULL) {
+                        parse_list_tail = NULL;
+                    }
+                }
+                xSemaphoreGive(xst_list_mutex);
+
+                // 如果链表空了，退出内层循环，继续等信号量
+                if (item == NULL) {
+                    break;
+                }
+
+                // --------- 开始对提取出的一帧进行正式解析 ---------
+                ESP_LOGI(XST_TAG, "--- [ 二值信号量唤醒解析任务 ] 提取到 1 帧数据 ---");
+                
+                // 打印解析出来的明文
+                xst_print_parsed_frame(item->msg_id, item->data_len, item->payload);
+                
+                // 转发给应用层业务
+                xst_dispatch_frame(item->msg_id, item->data_len, item->payload);
+                
+                ESP_LOGI(XST_TAG, "--------------------------------------------------");
+
+                // 清理堆内存
+                if (item->payload) free(item->payload);
+                free(item);
+            }
+        }
+    }
+}
+
+/*******************************************************************************
+ *               任务1：串口接收任务 (只负责收数据、切帧、发信号量)
+ ******************************************************************************/
+static void xst_uart_rx_task(void *param) {
+    uint8_t temp_buf[256];
+
+    while (1) {
+        int rx_len = uart_read_bytes(XST_UART_NUM, temp_buf, sizeof(temp_buf), pdMS_TO_TICKS(20));
+        
+        if (rx_len > 0) {
+            if (parse_len + rx_len <= PARSE_BUF_SIZE) {
+                memcpy(parse_buf + parse_len, temp_buf, rx_len);
+                parse_len += rx_len;
+            } else {
+                parse_len = 0; // 防溢出清空
+                continue;
+            }
+        }
+
+        // 滑动窗口切帧
+        while (parse_len >= 5) {
+            int sync_idx = -1;
+            
+            // 找包头 0xEF 0xAA
+            for (int i = 0; i < parse_len - 1; i++) {
+                if (parse_buf[i] == XST_SYNC_WORD_H && parse_buf[i+1] == XST_SYNC_WORD_L) {
+                    sync_idx = i;
+                    break;
+                }
+            }
+
+            if (sync_idx == -1) {
+                if (parse_buf[parse_len - 1] == XST_SYNC_WORD_H) {
+                    parse_buf[0] = XST_SYNC_WORD_H;
+                    parse_len = 1;
+                } else {
+                    parse_len = 0;
+                }
+                break;
+            }
+
+            if (sync_idx > 0) {
+                memmove(parse_buf, parse_buf + sync_idx, parse_len - sync_idx);
+                parse_len -= sync_idx;
+            }
+
+            if (parse_len < 5) break; 
+
+            uint8_t msg_id = parse_buf[2];
+            uint16_t data_len = ((uint16_t)parse_buf[3] << 8) | parse_buf[4];
+            uint32_t frame_total_len = 5 + data_len + 1;
+
+            if (frame_total_len > PARSE_BUF_SIZE) {
+                memmove(parse_buf, parse_buf + 2, parse_len - 2); 
+                parse_len -= 2;
+                continue;
+            }
+
+            if (parse_len < frame_total_len) {
+                break; // 帧不完整，继续等
+            }
+
+            // ================= 提取出完整帧 =================
+
+            // [功能1] 打印接收到的原始 HEX 数据
+            ESP_LOGI(XST_TAG, "\n<<<<<<<<<<<<<<<<<<<<<<< [ UART 接收 ] <<<<<<<<<<<<<<<<<<<<<<<");
+            ESP_LOGI(XST_TAG, "=> 捕获完整帧，总长: %lu 字节", (unsigned long)frame_total_len);
+            esp_log_buffer_hex(XST_TAG "-RX", parse_buf, frame_total_len);
+            ESP_LOGI(XST_TAG, "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<");
+
+            // 校验
+            uint8_t calc_sum = xst_calc_checksum(msg_id, data_len, &parse_buf[5]);
+            uint8_t rx_sum = parse_buf[frame_total_len - 1];
+
+            if (calc_sum == rx_sum) {
+                // [功能2] 将合法数据放入链表，并使用“二值信号量”通知解析任务
+                parse_item_t *new_item = malloc(sizeof(parse_item_t));
+                if (new_item) {
+                    new_item->msg_id = msg_id;
+                    new_item->data_len = data_len;
+                    new_item->payload = NULL;
+                    new_item->next = NULL;
+
+                    if (data_len > 0) {
+                        new_item->payload = malloc(data_len);
+                        if (new_item->payload) {
+                            memcpy(new_item->payload, &parse_buf[5], data_len);
+                        }
+                    }
+
+                    // 加锁入队
+                    xSemaphoreTake(xst_list_mutex, portMAX_DELAY);
+                    if (parse_list_tail == NULL) {
+                        parse_list_head = new_item;
+                        parse_list_tail = new_item;
+                    } else {
+                        parse_list_tail->next = new_item;
+                        parse_list_tail = new_item;
+                    }
+                    xSemaphoreGive(xst_list_mutex);
+
+                    // 【核心】释放二值信号量，通知解析任务干活
+                    xSemaphoreGive(xst_parse_sem);
+                }
+            } else {
+                ESP_LOGE(XST_TAG, "RX Checksum Error: calc %02X, got %02X", calc_sum, rx_sum);
+            }
+
+            // 将此帧从缓冲区剔除
+            if (parse_len > frame_total_len) {
+                memmove(parse_buf, parse_buf + frame_total_len, parse_len - frame_total_len);
+                parse_len -= frame_total_len;
+            } else {
+                parse_len = 0;
+            }
+        }
+    }
+}
+
+/*******************************************************************************
+ *                               API 实现 
  ******************************************************************************/
 
 void xst_init(xst_note_callback_t callback) {
@@ -349,17 +384,22 @@ void xst_init(xst_note_callback_t callback) {
         .rx_flow_ctrl_thresh = 122,
         .source_clk = UART_SCLK_APB,
     };
-    uart_driver_install(XST_UART_NUM, RX_BUF_SIZE * 2, 0, 0, NULL, 0);
+    uart_driver_install(XST_UART_NUM, 4096, 4096, 0, NULL, 0);
     uart_param_config(XST_UART_NUM, &uart_config);
     uart_set_pin(XST_UART_NUM, XST_TX_PIN, XST_RX_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
 
-    // 创建回复队列
-    xst_reply_queue = xQueueCreate(1, sizeof(queue_item_t));
+    // [新增] 创建二值信号量（初始状态为空）
+    xst_parse_sem = xSemaphoreCreateBinary();
+    // [新增] 创建互斥锁保护链表
+    xst_list_mutex = xSemaphoreCreateMutex();
 
-    // 创建接收任务
-    xTaskCreatePinnedToCore(xst_uart_task, "xst_rx", 4096, NULL, 10, NULL,1);
+    xst_reply_queue = xQueueCreate(3, sizeof(queue_item_t)); 
+
+    //[新增] 创建并行的接收任务和解析任务
+    xTaskCreate(xst_uart_rx_task, "xst_rx",  4096, NULL, 15, NULL);  // 优先级稍微高一点，保证收包实时性
+    xTaskCreate(xst_parse_task,   "xst_prs", 4096, NULL, 10, NULL);  // 优先级稍微低一点，慢条斯理地解析
     
-    ESP_LOGI(XST_TAG, "Initialized");
+    ESP_LOGI(XST_TAG, "XST Driver Initialized with Dual-Task & Binary Semaphore System");
 }
 
 // 内部使用的事务处理封装
@@ -370,34 +410,35 @@ static xst_result_t xst_exec_cmd(uint8_t cmd, uint8_t *tx_data, uint16_t tx_len,
     
     queue_item_t item;
     if (xQueueReceive(xst_reply_queue, &item, pdMS_TO_TICKS(timeout)) == pdTRUE) {
-        // item.data format: [mid][result][payload...]
         xst_reply_body_t *body = (xst_reply_body_t *)item.data;
+        ESP_LOGI(XST_TAG, "=> [xst_exec_cmd] 收到回复, body->mid=0x%02X, 期望cmd=0x%02X", body->mid, cmd);
         
         if (body->mid != cmd) {
+            ESP_LOGW(XST_TAG, "=> [xst_exec_cmd] 命令ID不匹配! 丢弃此回复");
             free(item.data);
             return MR_FAILED4_UNKNOWN_REASON;
         }
         
         xst_result_t res = (xst_result_t)body->result;
+        ESP_LOGI(XST_TAG, "=> [xst_exec_cmd] 命令执行结果: %d (%s)", res, xst_get_result_str(res));
         
         if (rx_payload && rx_len) {
-            // 用户想要数据
-            *rx_len = item.len - 2; // sub mid & result
+            *rx_len = item.len - 2;
             if (*rx_len > 0) {
                 *rx_payload = malloc(*rx_len);
-                if (*rx_payload) {
-                    memcpy(*rx_payload, body->payload, *rx_len);
-                }
+                if (*rx_payload) memcpy(*rx_payload, body->payload, *rx_len);
             } else {
                 *rx_payload = NULL;
             }
         }
-        
-        free(item.data); // 释放任务里分配的内存
+        free(item.data);
         return res;
     }
+    ESP_LOGW(XST_TAG, "=> [xst_exec_cmd] 等待回复超时 (%lu ms), 命令: 0x%02X", (unsigned long)timeout, cmd);
     return MR_FAILED4_TIME_OUT;
 }
+
+// ============== 其余向外暴露的API保持原样不变 ==============
 
 xst_result_t xst_cmd_reset(void) {
     return xst_exec_cmd(MID_RESET, NULL, 0, NULL, NULL, 2000);
@@ -407,10 +448,7 @@ xst_result_t xst_cmd_get_status(uint8_t *status) {
     uint8_t *data = NULL;
     uint16_t len = 0;
     xst_result_t res = xst_exec_cmd(MID_GETSTATUS, NULL, 0, &data, &len, 2000);
-    
-    if (res == MR_SUCCESS && data != NULL && len >= 1) {
-        *status = data[0];
-    }
+    if (res == MR_SUCCESS && data != NULL && len >= 1) *status = data[0];
     if (data) free(data);
     return res;
 }
@@ -420,33 +458,23 @@ xst_result_t xst_cmd_enroll_single(const char *name, uint8_t admin, uint8_t time
     memset(&param, 0, sizeof(param));
     param.admin = admin;
     param.timeout = timeout;
-    strncpy(param.user_name, name, 31); // 安全拷贝
+    strncpy(param.user_name, name, 31); 
 
-    // 指令超时时间要比参数里的timeout长
     uint32_t wait_time = (timeout + 5) * 1000;
-    
     uint8_t *data = NULL;
     uint16_t len = 0;
     
-    // 参数结构体直接作为Payload发送
     xst_result_t res = xst_exec_cmd(MID_ENROLL_SINGLE, (uint8_t*)&param, sizeof(param), &data, &len, wait_time);
 
     if (res == MR_SUCCESS && data != NULL && len >= 2) {
-        // 解析返回的 User ID (Big Endian according to structure usually, but check parsing)
-        // PDF Page 18: struct { uint8_t user_id_heb; uint8_t user_id_leb; ... }
-        // 所以是 High byte first
-        if (out_user_id) {
-            *out_user_id = (uint16_t)data[0] << 8 | data[1];
-        }
+        if (out_user_id) *out_user_id = (uint16_t)data[0] << 8 | data[1];
     }
     if (data) free(data);
     return res;
 }
 
 xst_result_t xst_cmd_verify(uint8_t timeout, uint16_t *out_user_id, char *out_name) {
-    // 构造请求包：pd_rightaway(1) + timeout(1)
     uint8_t req[2] = {0, timeout}; 
-    
     uint8_t *data = NULL;
     uint16_t len = 0;
     uint32_t wait_time = (timeout + 5) * 1000;
@@ -454,14 +482,10 @@ xst_result_t xst_cmd_verify(uint8_t timeout, uint16_t *out_user_id, char *out_na
     xst_result_t res = xst_exec_cmd(MID_VERIFY, req, 2, &data, &len, wait_time);
     
     if (res == MR_SUCCESS && data != NULL && len >= 34) { 
-        // Reply struct (PDF Page 16): 
-        // id_h(1), id_l(1), name(32), admin(1), unlockStatus(1)
-        if (out_user_id) {
-            *out_user_id = (uint16_t)data[0] << 8 | data[1];
-        }
+        if (out_user_id) *out_user_id = (uint16_t)data[0] << 8 | data[1];
         if (out_name) {
             memcpy(out_name, &data[2], 32);
-            out_name[31] = '\0'; // 确保字符串结束
+            out_name[31] = '\0'; 
         }
     }
     if (data) free(data);
@@ -469,19 +493,16 @@ xst_result_t xst_cmd_verify(uint8_t timeout, uint16_t *out_user_id, char *out_na
 }
 
 xst_result_t xst_cmd_del_user(uint16_t user_id) {
-    // PDF Page 25: input struct { id_heb, id_leb }
-    uint8_t req[2];
-    req[0] = (user_id >> 8) & 0xFF;
-    req[1] = user_id & 0xFF;
-    return xst_exec_cmd(MID_DEL_USER, req, 2, NULL, NULL, 5000);
+    uint8_t req[2] = {(user_id >> 8) & 0xFF, user_id & 0xFF};
+    return xst_exec_cmd(MID_DEL_USER, req, 2, NULL, NULL, 10000);
 }
 
 xst_result_t xst_cmd_del_all(void) {
-    return xst_exec_cmd(MID_DEL_ALL, NULL, 0, NULL, NULL, 5000);
+    return xst_exec_cmd(MID_DEL_ALL, NULL, 0, NULL, NULL, 10000);
 }
 
 xst_result_t xst_cmd_get_user_count(uint16_t *count) {
-     uint8_t *data = NULL;
+    uint8_t *data = NULL;
     uint16_t len = 0;
     xst_result_t res = xst_exec_cmd(MID_GET_ALL_USER_ID, NULL, 0, &data, &len, 2000);
 
@@ -492,72 +513,3 @@ xst_result_t xst_cmd_get_user_count(uint16_t *count) {
     return res;
 }
 
-/*
-XST在app_main里的use：
-#include "xst.h"
-#include "esp_log.h"
-
-// Note 异步消息回调
-void my_xst_callback(uint8_t nid, uint8_t *data, uint16_t len) {
-    switch (nid) {
-        case NID_READY:
-            ESP_LOGI("APP", "Module is Ready!");
-            break;
-        case NID_FACE_STATE:
-            ESP_LOGI("APP", "Face detected during interaction");
-            break;
-        default:
-            ESP_LOGI("APP", "Received Note ID: %d", nid);
-            break;
-    }
-}
-
-void app_main(void) {
-    // 1. 初始化
-    xst_init(my_xst_callback);
-
-    // 2. 复位模组
-    ESP_LOGI("APP", "Resetting module...");
-    if (xst_cmd_reset() == MR_SUCCESS) {
-        ESP_LOGI("APP", "Reset Success");
-    }
-
-    // 3. 延时等待模组启动
-    vTaskDelay(pdMS_TO_TICKS(1000));
-
-    // 4. 获取状态
-    uint8_t status = 0;
-    xst_cmd_get_status(&status);
-    ESP_LOGI("APP", "Status: %d", status);
-
-    // 5. 录入用户 (阻塞直到录入完成或超时)
-    uint16_t new_id = 0;
-    ESP_LOGI("APP", "Start Enrollment (Please put palm/face)...");
-    xst_result_t res = xst_cmd_enroll_single("StudentA", 0, 15, &new_id); // 15秒超时
-    
-    if (res == MR_SUCCESS) {
-        ESP_LOGI("APP", "Enroll Success! ID: %d", new_id);
-    } else {
-        ESP_LOGE("APP", "Enroll Failed, code: %d", res);
-    }
-
-    // 6. 识别测试
-    while (1) {
-        char name[32] = {0};
-        uint16_t uid = 0;
-        ESP_LOGI("APP", "Waiting for verify...");
-        
-        // 此函数会阻塞等待识别结果
-        res = xst_cmd_verify(10, &uid, name); // 10秒超时
-        
-        if (res == MR_SUCCESS) {
-            ESP_LOGI("APP", "Verified! Hello ID: %d, Name: %s", uid, name);
-        } else if (res == MR_FAILED4_TIME_OUT) {
-            ESP_LOGW("APP", "Verify Timeout");
-        } else {
-            ESP_LOGE("APP", "Verify Error: %d", res);
-        }
-        vTaskDelay(pdMS_TO_TICKS(1000));
-    }
-}
-*/
