@@ -3,9 +3,10 @@ idf_component_register( SRCS
                             "touch.c"
                         INCLUDE_DIRS 
                             "."
-                        REQUIRES
+                        REQUIRES    
                             driver
                             esp_lcd 
+                            esp_common
                             esp_driver_spi
                             esp_driver_i2c
                             esp_driver_ledc

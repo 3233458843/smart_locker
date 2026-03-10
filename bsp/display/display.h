@@ -1,8 +1,9 @@
 #ifndef _DISPLAY_H_
 #define _DISPLAY_H_
 
-#include "esp_err.h"
 #include "esp_lcd_types.h"
+#include "esp_err.h"
+#include <stdint.h>
 
 /* ============ 显示屏硬件配置 ============ */
 #define DISPLAY_WIDTH       240
@@ -19,8 +20,8 @@
 
 /* SPI 配置 */
 #define DISPLAY_SPI_HOST    SPI2_HOST
-// ESP32-S3 配合 ST7789 可以跑到 40MHz 甚至 80MHz，布线好可以直接上 80*1000*1000
-#define DISPLAY_CLOCK_HZ    (5 * 1000 * 1000) 
+
+#define DISPLAY_CLOCK_HZ    (80 * 1000 * 1000)
 
 /* ============ API接口 ============ */
 
@@ -46,7 +47,17 @@ void backlight_set(uint8_t brightness);
 esp_lcd_panel_handle_t display_get_panel_handle(void);
 
 /**
- * @brief 阻塞等待DMA传输完成 (LVGL flush_cb 会用到)
+ * @brief 注册 LVGL flush-ready 回调。
+ * @param flush_ready_cb  函数指针，签名为 void cb(void *arg)
+ * @param arg             透传给回调的参数，通常传 lv_display_t*
+ */
+void display_set_flush_ready_cb(void (*flush_ready_cb)(void *arg), void *arg);
+
+/**
+ * @brief 阻塞等待DMA传输完成。
+ *
+ * 仅供 display_test() 等非 LVGL 路径使用，
+ * LVGL 路径已通过回调异步通知，不应再调用此函数。
  */
 void display_wait_flush_done(void);
 
@@ -54,5 +65,6 @@ void display_wait_flush_done(void);
  * @brief 屏幕驱动测试函数，显示彩色块
  */
 void display_test(void);
+
 
 #endif // _DISPLAY_H_

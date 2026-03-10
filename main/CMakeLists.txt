@@ -2,7 +2,10 @@ idf_component_register(SRCS
                         "main.c"
                     INCLUDE_DIRS 
                         "."
-                    PRIV_REQUIRES
+                    REQUIRES
+                        esp_timer
                         display
-                        XST
+                        lvgl
+                        lvgl_port
+                        XST    
                     )

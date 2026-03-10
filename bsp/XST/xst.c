@@ -4,9 +4,9 @@
 #include "esp_log.h"
 #include "driver/uart.h"
 #include "driver/gpio.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/semphr.h"
+// #include "freertos/FreeRTOS.h"
+// #include "freertos/task.h"
+// #include "freertos/semphr.h"
 
 // ---------------- 核心通信与任务同步资源 ----------------
 // 内部使用的命令回复队列 (供业务API阻塞等待结果)
@@ -388,14 +388,14 @@ void xst_init(xst_note_callback_t callback) {
     uart_param_config(XST_UART_NUM, &uart_config);
     uart_set_pin(XST_UART_NUM, XST_TX_PIN, XST_RX_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
 
-    // [新增] 创建二值信号量（初始状态为空）
+    // 创建二值信号量（初始状态为空）
     xst_parse_sem = xSemaphoreCreateBinary();
-    // [新增] 创建互斥锁保护链表
+    // 创建互斥锁保护链表
     xst_list_mutex = xSemaphoreCreateMutex();
 
     xst_reply_queue = xQueueCreate(3, sizeof(queue_item_t)); 
 
-    //[新增] 创建并行的接收任务和解析任务
+    // 创建并行的接收任务和解析任务
     xTaskCreate(xst_uart_rx_task, "xst_rx",  4096, NULL, 15, NULL);  // 优先级稍微高一点，保证收包实时性
     xTaskCreate(xst_parse_task,   "xst_prs", 4096, NULL, 10, NULL);  // 优先级稍微低一点，慢条斯理地解析
     
