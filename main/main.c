@@ -8,6 +8,9 @@
 #include "lvgl.h"
 #include "demos/lv_demos.h"
 
+#include "../bsp/ui/generated/gui_guider.h"
+#include "../bsp/ui/generated/events_init.h"
+
 // #include "xst.h"
 // #include "xst_pack_t.h"
 
@@ -17,6 +20,8 @@
 #define TAG "MAIN"
 
 static esp_timer_handle_t lvgl_tick_timer = NULL;
+
+lv_ui guider_ui;  // 全局 UI 结构体实例
 
 // 定时回调函数，每 1ms 触发
 static void lv_tick_task(void *arg) {
@@ -41,10 +46,9 @@ static void lvgl_demo_task(void *arg)
 {
     (void)arg;
 
-    /* 运行 LVGL 演示来测试屏幕和触摸 */
-    lv_demo_widgets();      // 显示各种UI控件演示
-    // lv_demo_benchmark();  // 性能测试
-    
+    setup_ui(&guider_ui);
+    events_init(&guider_ui);   
+
     ESP_LOGI(TAG, "LVGL demo started");
     
     while (1) {
@@ -68,7 +72,7 @@ void app_main(void){
     xTaskCreatePinnedToCore(
         lvgl_demo_task,
         "lvgl_demo_task",
-                12800,                 
+        24000,                 
         NULL,
         3,                     /* 优先级 */
         NULL,

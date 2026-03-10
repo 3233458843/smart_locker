@@ -6,8 +6,8 @@
 #include <stdint.h>
 
 /* ============ 显示屏硬件配置 ============ */
-#define DISPLAY_WIDTH       240
-#define DISPLAY_HEIGHT      320
+#define DISPLAY_WIDTH       320
+#define DISPLAY_HEIGHT      240
 
 /* 根据提供的引脚图更新引脚 */
 #define DISPLAY_SCL_PIN     12  // SCK

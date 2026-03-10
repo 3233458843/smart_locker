@@ -106,6 +106,8 @@ esp_err_t display_init(void)
     /* 5. 硬件初始化序列 */
     esp_lcd_panel_reset(panel_handle);
     esp_lcd_panel_init(panel_handle);
+    esp_lcd_panel_swap_xy(panel_handle, true);          
+    esp_lcd_panel_mirror(panel_handle, true, false);  
     esp_lcd_panel_invert_color(panel_handle, false);
     esp_lcd_panel_disp_on_off(panel_handle, true);
 

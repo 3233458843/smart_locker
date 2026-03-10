@@ -7,5 +7,7 @@ idf_component_register(SRCS
                         display
                         lvgl
                         lvgl_port
-                        XST    
+                        XST
+                        custom
+                        generated
                     )

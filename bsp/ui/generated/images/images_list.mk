@@ -1,0 +1,1 @@
+GEN_CSRCS += _setting_RGB565A8_40x40.c _back_RGB565A8_50x50.c

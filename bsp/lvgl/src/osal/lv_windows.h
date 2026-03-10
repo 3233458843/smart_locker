@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @file lv_windows.h
  *
  */
@@ -16,7 +16,7 @@ extern "C" {
 
 #if LV_USE_OS == LV_OS_WINDOWS
 
-#include <windows.h>
+#include <Windows.h>
 #include <stdbool.h>
 
 /*********************

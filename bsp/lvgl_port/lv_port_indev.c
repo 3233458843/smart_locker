@@ -213,8 +213,8 @@ static bool touchpad_is_pressed(void)
 static void touchpad_get_xy(int32_t * x, int32_t * y)
 {
     touch_read_point(&touch_point);
-    (*x) = touch_point.x;
-    (*y) = touch_point.y;
+    (*x) = touch_point.y;
+    (*y) = 240 -1 - touch_point.x;
 }
 
 /*------------------
