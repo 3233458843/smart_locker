@@ -45,7 +45,7 @@ void setup_scr_saved_item(lv_ui *ui)
     lv_obj_set_style_shadow_width(ui->saved_item_cont_1, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
 
     //Write codes saved_item_imgbtn_1
-    ui->saved_item_imgbtn_1 = lv_imagebutton_create(ui->saved_item);
+    ui->saved_item_imgbtn_1 = lv_imagebutton_create(ui->saved_item_cont_1);
     lv_obj_set_pos(ui->saved_item_imgbtn_1, 0, 0);
     lv_obj_set_size(ui->saved_item_imgbtn_1, 50, 50);
     lv_obj_add_flag(ui->saved_item_imgbtn_1, LV_OBJ_FLAG_CHECKABLE);

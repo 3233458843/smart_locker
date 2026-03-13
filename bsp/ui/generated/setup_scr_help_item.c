@@ -36,7 +36,7 @@ void setup_scr_help_item(lv_ui *ui)
     lv_obj_set_style_border_width(ui->help_item_cont_1, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
     lv_obj_set_style_radius(ui->help_item_cont_1, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
     lv_obj_set_style_bg_opa(ui->help_item_cont_1, 255, LV_PART_MAIN|LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(ui->help_item_cont_1, lv_color_hex(0xffffff), LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(ui->help_item_cont_1, lv_color_hex(0xa4d6fb), LV_PART_MAIN|LV_STATE_DEFAULT);
     lv_obj_set_style_bg_grad_dir(ui->help_item_cont_1, LV_GRAD_DIR_NONE, LV_PART_MAIN|LV_STATE_DEFAULT);
     lv_obj_set_style_pad_top(ui->help_item_cont_1, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
     lv_obj_set_style_pad_bottom(ui->help_item_cont_1, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
@@ -44,8 +44,118 @@ void setup_scr_help_item(lv_ui *ui)
     lv_obj_set_style_pad_right(ui->help_item_cont_1, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
     lv_obj_set_style_shadow_width(ui->help_item_cont_1, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
 
+    //Write codes help_item_cont_2
+    ui->help_item_cont_2 = lv_obj_create(ui->help_item_cont_1);
+    lv_obj_set_pos(ui->help_item_cont_2, 52, 45);
+    lv_obj_set_size(ui->help_item_cont_2, 215, 170);
+    lv_obj_set_scrollbar_mode(ui->help_item_cont_2, LV_SCROLLBAR_MODE_OFF);
+
+    //Write style for help_item_cont_2, Part: LV_PART_MAIN, State: LV_STATE_DEFAULT.
+    lv_obj_set_style_border_width(ui->help_item_cont_2, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_radius(ui->help_item_cont_2, 10, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(ui->help_item_cont_2, 255, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(ui->help_item_cont_2, lv_color_hex(0xebcece), LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_grad_dir(ui->help_item_cont_2, LV_GRAD_DIR_NONE, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_top(ui->help_item_cont_2, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_bottom(ui->help_item_cont_2, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_left(ui->help_item_cont_2, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_right(ui->help_item_cont_2, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_shadow_width(ui->help_item_cont_2, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+
+    //Write codes help_item_label_3
+    ui->help_item_label_3 = lv_label_create(ui->help_item_cont_2);
+    lv_obj_set_pos(ui->help_item_label_3, 2, 2);
+    lv_obj_set_size(ui->help_item_label_3, 210, 109);
+    lv_label_set_text(ui->help_item_label_3, "1.点击主界面[存件]或者[取件]\n2.将手掌悬停于传感器前10cm左右\n3.等待设备发出“滴”声，柜门即可弹开\n！！！绿色标识柜门可用，红色标识柜门已被占用！！！");
+    lv_label_set_long_mode(ui->help_item_label_3, LV_LABEL_LONG_WRAP);
+
+    //Write style for help_item_label_3, Part: LV_PART_MAIN, State: LV_STATE_DEFAULT.
+    lv_obj_set_style_border_width(ui->help_item_label_3, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_radius(ui->help_item_label_3, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_color(ui->help_item_label_3, lv_color_hex(0x000000), LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(ui->help_item_label_3, &lv_font_Lemi_Little_Milk_Foam_Font_16, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_opa(ui->help_item_label_3, 255, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_letter_space(ui->help_item_label_3, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_line_space(ui->help_item_label_3, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_align(ui->help_item_label_3, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(ui->help_item_label_3, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_top(ui->help_item_label_3, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_right(ui->help_item_label_3, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_bottom(ui->help_item_label_3, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_left(ui->help_item_label_3, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_shadow_width(ui->help_item_label_3, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+
+    //Write codes help_item_label_4
+    ui->help_item_label_4 = lv_label_create(ui->help_item_cont_2);
+    lv_obj_set_pos(ui->help_item_label_4, 6, 130);
+    lv_obj_set_size(ui->help_item_label_4, 203, 32);
+    lv_label_set_text(ui->help_item_label_4, "遇到问题联系管理员同学~\n123456789（刘同学）");
+    lv_label_set_long_mode(ui->help_item_label_4, LV_LABEL_LONG_WRAP);
+
+    //Write style for help_item_label_4, Part: LV_PART_MAIN, State: LV_STATE_DEFAULT.
+    lv_obj_set_style_border_width(ui->help_item_label_4, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_radius(ui->help_item_label_4, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_color(ui->help_item_label_4, lv_color_hex(0x000000), LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(ui->help_item_label_4, &lv_font_Lemi_Little_Milk_Foam_Font_16, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_opa(ui->help_item_label_4, 255, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_letter_space(ui->help_item_label_4, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_line_space(ui->help_item_label_4, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_align(ui->help_item_label_4, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(ui->help_item_label_4, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_top(ui->help_item_label_4, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_right(ui->help_item_label_4, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_bottom(ui->help_item_label_4, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_left(ui->help_item_label_4, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_shadow_width(ui->help_item_label_4, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+
+    //Write codes help_item_label_1
+    ui->help_item_label_1 = lv_label_create(ui->help_item_cont_1);
+    lv_obj_set_pos(ui->help_item_label_1, 41, 9);
+    lv_obj_set_size(ui->help_item_label_1, 168, 30);
+    lv_label_set_text(ui->help_item_label_1, "ヾ(●゜▽゜●)♡");
+    lv_label_set_long_mode(ui->help_item_label_1, LV_LABEL_LONG_WRAP);
+
+    //Write style for help_item_label_1, Part: LV_PART_MAIN, State: LV_STATE_DEFAULT.
+    lv_obj_set_style_border_width(ui->help_item_label_1, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_radius(ui->help_item_label_1, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_color(ui->help_item_label_1, lv_color_hex(0x000000), LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(ui->help_item_label_1, &lv_font_LXGWWenKaiMono_Medium_20, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_opa(ui->help_item_label_1, 255, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_letter_space(ui->help_item_label_1, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_line_space(ui->help_item_label_1, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_align(ui->help_item_label_1, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(ui->help_item_label_1, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_top(ui->help_item_label_1, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_right(ui->help_item_label_1, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_bottom(ui->help_item_label_1, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_left(ui->help_item_label_1, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_shadow_width(ui->help_item_label_1, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+
+    //Write codes help_item_label_2
+    ui->help_item_label_2 = lv_label_create(ui->help_item_cont_1);
+    lv_obj_set_pos(ui->help_item_label_2, 208, 3);
+    lv_obj_set_size(ui->help_item_label_2, 106, 36);
+    lv_label_set_text(ui->help_item_label_2, "使用说明");
+    lv_label_set_long_mode(ui->help_item_label_2, LV_LABEL_LONG_WRAP);
+
+    //Write style for help_item_label_2, Part: LV_PART_MAIN, State: LV_STATE_DEFAULT.
+    lv_obj_set_style_border_width(ui->help_item_label_2, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_radius(ui->help_item_label_2, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_color(ui->help_item_label_2, lv_color_hex(0x000000), LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(ui->help_item_label_2, &lv_font_Lemi_Little_Milk_Foam_Font_29, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_opa(ui->help_item_label_2, 255, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_letter_space(ui->help_item_label_2, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_line_space(ui->help_item_label_2, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_align(ui->help_item_label_2, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(ui->help_item_label_2, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_top(ui->help_item_label_2, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_right(ui->help_item_label_2, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_bottom(ui->help_item_label_2, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_left(ui->help_item_label_2, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_shadow_width(ui->help_item_label_2, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+
     //Write codes help_item_imgbtn_1
-    ui->help_item_imgbtn_1 = lv_imagebutton_create(ui->help_item);
+    ui->help_item_imgbtn_1 = lv_imagebutton_create(ui->help_item_cont_1);
     lv_obj_set_pos(ui->help_item_imgbtn_1, 0, 0);
     lv_obj_set_size(ui->help_item_imgbtn_1, 50, 50);
     lv_obj_add_flag(ui->help_item_imgbtn_1, LV_OBJ_FLAG_CHECKABLE);
