@@ -53,7 +53,7 @@ void setup_scr_setting_item(lv_ui *ui)
     lv_spangroup_set_mode(ui->setting_item_spangroup_1, LV_SPAN_MODE_BREAK);
     //create span
     ui->setting_item_spangroup_1_span = lv_spangroup_new_span(ui->setting_item_spangroup_1);
-    lv_span_set_text(ui->setting_item_spangroup_1_span, "hello");
+    lv_span_set_text(ui->setting_item_spangroup_1_span, "no note!!!");
     lv_style_set_text_color(lv_span_get_style(ui->setting_item_spangroup_1_span), lv_color_hex(0x000000));
     lv_style_set_text_decor(lv_span_get_style(ui->setting_item_spangroup_1_span), LV_TEXT_DECOR_NONE);
     lv_style_set_text_font(lv_span_get_style(ui->setting_item_spangroup_1_span), &lv_font_montserratMedium_12);
@@ -226,6 +226,121 @@ void setup_scr_setting_item(lv_ui *ui)
     lv_obj_set_style_text_font(ui->setting_item_btn_4, &lv_font_LXGWWenKaiMono_Medium_16, LV_PART_MAIN|LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui->setting_item_btn_4, 255, LV_PART_MAIN|LV_STATE_DEFAULT);
     lv_obj_set_style_text_align(ui->setting_item_btn_4, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN|LV_STATE_DEFAULT);
+
+    //Write codes setting_item_btn_5
+    ui->setting_item_btn_5 = lv_button_create(ui->setting_item_cont_2);
+    lv_obj_set_pos(ui->setting_item_btn_5, 0, 318);
+    lv_obj_set_size(ui->setting_item_btn_5, 61, 50);
+    ui->setting_item_btn_5_label = lv_label_create(ui->setting_item_btn_5);
+    lv_label_set_text(ui->setting_item_btn_5_label, "locker1");
+    lv_label_set_long_mode(ui->setting_item_btn_5_label, LV_LABEL_LONG_WRAP);
+    lv_obj_align(ui->setting_item_btn_5_label, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_set_style_pad_all(ui->setting_item_btn_5, 0, LV_STATE_DEFAULT);
+    lv_obj_set_width(ui->setting_item_btn_5_label, LV_PCT(100));
+
+    //Write style for setting_item_btn_5, Part: LV_PART_MAIN, State: LV_STATE_DEFAULT.
+    lv_obj_set_style_bg_opa(ui->setting_item_btn_5, 255, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(ui->setting_item_btn_5, lv_color_hex(0x2195f6), LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_grad_dir(ui->setting_item_btn_5, LV_GRAD_DIR_NONE, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_border_width(ui->setting_item_btn_5, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_radius(ui->setting_item_btn_5, 5, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_shadow_width(ui->setting_item_btn_5, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_color(ui->setting_item_btn_5, lv_color_hex(0xffffff), LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(ui->setting_item_btn_5, &lv_font_montserratMedium_16, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_opa(ui->setting_item_btn_5, 255, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_align(ui->setting_item_btn_5, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN|LV_STATE_DEFAULT);
+
+    //Write codes setting_item_btn_6
+    ui->setting_item_btn_6 = lv_button_create(ui->setting_item_cont_2);
+    lv_obj_set_pos(ui->setting_item_btn_6, 0, 400);
+    lv_obj_set_size(ui->setting_item_btn_6, 61, 50);
+    ui->setting_item_btn_6_label = lv_label_create(ui->setting_item_btn_6);
+    lv_label_set_text(ui->setting_item_btn_6_label, "locker2");
+    lv_label_set_long_mode(ui->setting_item_btn_6_label, LV_LABEL_LONG_WRAP);
+    lv_obj_align(ui->setting_item_btn_6_label, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_set_style_pad_all(ui->setting_item_btn_6, 0, LV_STATE_DEFAULT);
+    lv_obj_set_width(ui->setting_item_btn_6_label, LV_PCT(100));
+
+    //Write style for setting_item_btn_6, Part: LV_PART_MAIN, State: LV_STATE_DEFAULT.
+    lv_obj_set_style_bg_opa(ui->setting_item_btn_6, 255, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(ui->setting_item_btn_6, lv_color_hex(0x2195f6), LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_grad_dir(ui->setting_item_btn_6, LV_GRAD_DIR_NONE, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_border_width(ui->setting_item_btn_6, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_radius(ui->setting_item_btn_6, 5, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_shadow_width(ui->setting_item_btn_6, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_color(ui->setting_item_btn_6, lv_color_hex(0xffffff), LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(ui->setting_item_btn_6, &lv_font_montserratMedium_16, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_opa(ui->setting_item_btn_6, 255, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_align(ui->setting_item_btn_6, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN|LV_STATE_DEFAULT);
+
+    //Write codes setting_item_btn_7
+    ui->setting_item_btn_7 = lv_button_create(ui->setting_item_cont_2);
+    lv_obj_set_pos(ui->setting_item_btn_7, 0, 480);
+    lv_obj_set_size(ui->setting_item_btn_7, 61, 50);
+    ui->setting_item_btn_7_label = lv_label_create(ui->setting_item_btn_7);
+    lv_label_set_text(ui->setting_item_btn_7_label, "locker3");
+    lv_label_set_long_mode(ui->setting_item_btn_7_label, LV_LABEL_LONG_WRAP);
+    lv_obj_align(ui->setting_item_btn_7_label, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_set_style_pad_all(ui->setting_item_btn_7, 0, LV_STATE_DEFAULT);
+    lv_obj_set_width(ui->setting_item_btn_7_label, LV_PCT(100));
+
+    //Write style for setting_item_btn_7, Part: LV_PART_MAIN, State: LV_STATE_DEFAULT.
+    lv_obj_set_style_bg_opa(ui->setting_item_btn_7, 255, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(ui->setting_item_btn_7, lv_color_hex(0x2195f6), LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_grad_dir(ui->setting_item_btn_7, LV_GRAD_DIR_NONE, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_border_width(ui->setting_item_btn_7, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_radius(ui->setting_item_btn_7, 5, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_shadow_width(ui->setting_item_btn_7, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_color(ui->setting_item_btn_7, lv_color_hex(0xffffff), LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(ui->setting_item_btn_7, &lv_font_montserratMedium_16, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_opa(ui->setting_item_btn_7, 255, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_align(ui->setting_item_btn_7, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN|LV_STATE_DEFAULT);
+
+    //Write codes setting_item_btn_8
+    ui->setting_item_btn_8 = lv_button_create(ui->setting_item_cont_2);
+    lv_obj_set_pos(ui->setting_item_btn_8, 0, 560);
+    lv_obj_set_size(ui->setting_item_btn_8, 61, 50);
+    ui->setting_item_btn_8_label = lv_label_create(ui->setting_item_btn_8);
+    lv_label_set_text(ui->setting_item_btn_8_label, "locker4");
+    lv_label_set_long_mode(ui->setting_item_btn_8_label, LV_LABEL_LONG_WRAP);
+    lv_obj_align(ui->setting_item_btn_8_label, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_set_style_pad_all(ui->setting_item_btn_8, 0, LV_STATE_DEFAULT);
+    lv_obj_set_width(ui->setting_item_btn_8_label, LV_PCT(100));
+
+    //Write style for setting_item_btn_8, Part: LV_PART_MAIN, State: LV_STATE_DEFAULT.
+    lv_obj_set_style_bg_opa(ui->setting_item_btn_8, 255, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(ui->setting_item_btn_8, lv_color_hex(0x2195f6), LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_grad_dir(ui->setting_item_btn_8, LV_GRAD_DIR_NONE, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_border_width(ui->setting_item_btn_8, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_radius(ui->setting_item_btn_8, 5, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_shadow_width(ui->setting_item_btn_8, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_color(ui->setting_item_btn_8, lv_color_hex(0xffffff), LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(ui->setting_item_btn_8, &lv_font_montserratMedium_16, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_opa(ui->setting_item_btn_8, 255, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_align(ui->setting_item_btn_8, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN|LV_STATE_DEFAULT);
+
+    //Write codes setting_item_btn_9
+    ui->setting_item_btn_9 = lv_button_create(ui->setting_item_cont_2);
+    lv_obj_set_pos(ui->setting_item_btn_9, 0, 640);
+    lv_obj_set_size(ui->setting_item_btn_9, 61, 50);
+    ui->setting_item_btn_9_label = lv_label_create(ui->setting_item_btn_9);
+    lv_label_set_text(ui->setting_item_btn_9_label, "all on");
+    lv_label_set_long_mode(ui->setting_item_btn_9_label, LV_LABEL_LONG_WRAP);
+    lv_obj_align(ui->setting_item_btn_9_label, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_set_style_pad_all(ui->setting_item_btn_9, 0, LV_STATE_DEFAULT);
+    lv_obj_set_width(ui->setting_item_btn_9_label, LV_PCT(100));
+
+    //Write style for setting_item_btn_9, Part: LV_PART_MAIN, State: LV_STATE_DEFAULT.
+    lv_obj_set_style_bg_opa(ui->setting_item_btn_9, 255, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(ui->setting_item_btn_9, lv_color_hex(0x2195f6), LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_grad_dir(ui->setting_item_btn_9, LV_GRAD_DIR_NONE, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_border_width(ui->setting_item_btn_9, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_radius(ui->setting_item_btn_9, 5, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_shadow_width(ui->setting_item_btn_9, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_color(ui->setting_item_btn_9, lv_color_hex(0xffffff), LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(ui->setting_item_btn_9, &lv_font_montserratMedium_16, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_opa(ui->setting_item_btn_9, 255, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_text_align(ui->setting_item_btn_9, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN|LV_STATE_DEFAULT);
 
     //Write codes setting_item_label_1
     ui->setting_item_label_1 = lv_label_create(ui->setting_item_cont_1);

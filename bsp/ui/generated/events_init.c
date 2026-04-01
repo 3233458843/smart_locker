@@ -8,7 +8,11 @@
 */
 
 #include "events_init.h"
+
+#include <esp_log.h>
 #include <stdio.h>
+#include "freertos/FreeRTOS.h"
+#include <freertos/task.h>
 #include "lvgl.h"
 
 #if LV_USE_GUIDER_SIMULATOR && LV_USE_FREEMASTER
@@ -55,21 +59,19 @@ static void main_btnm_1_event_handler (lv_event_t *e)
         }
         else if(strcmp(my_txt, "√") == 0 || strcmp(my_txt, "v") == 0) {
             // 【确认键】
-            // 💡 优化：不再固定必须输满4位，而是自动获取你设置的密码长度！
             if(pwd_len == strlen(correct_pwd)) {
                 if(strcmp(input_pwd, correct_pwd) == 0) {
 
                     // ✅ 密码正确，准备跳转！
                     printf("Password Correct! Jumping to Setting...\n");
-
-                    // 可选彩蛋：改变鸽鸽的台词
                     lv_label_set_text(ui->main_label_8, "哎呦不错哦，进去吧~");
 
-                    // 🌟 核心跳转代码：加载并进入 setting_item 页面
+                    // 🌟 终极极简跳转法：既然有了 PSRAM 内存无敌，直接加载新页面！
+                    // 不发信号了！不删页面了！直接暴力切屏！
                     if(ui->setting_item == NULL) {
-                        setup_scr_setting_item(ui); // 初始化页面
+                        setup_scr_setting_item(ui); // 没创建就创建它
                     }
-                    lv_scr_load(ui->setting_item);  // 切换屏幕
+                    lv_scr_load(ui->setting_item);  // 瞬间切屏过去！
 
                 } else {
                     // ❌ 密码错误
@@ -216,6 +218,20 @@ void events_init_main (lv_ui *ui)
     lv_obj_add_event_cb(ui->main_btn_1, main_btn_1_event_handler, LV_EVENT_ALL, ui);
 }
 
+static void saved_item_event_handler (lv_event_t *e)
+{
+    lv_event_code_t code = lv_event_get_code(e);
+    switch (code) {
+    case LV_EVENT_SCREEN_LOADED:
+    {
+
+        break;
+    }
+    default:
+        break;
+    }
+}
+
 static void saved_item_imgbtn_1_event_handler (lv_event_t *e)
 {
     lv_event_code_t code = lv_event_get_code(e);
@@ -232,7 +248,39 @@ static void saved_item_imgbtn_1_event_handler (lv_event_t *e)
 
 void events_init_saved_item (lv_ui *ui)
 {
+    lv_obj_add_event_cb(ui->saved_item, saved_item_event_handler, LV_EVENT_ALL, ui);
     lv_obj_add_event_cb(ui->saved_item_imgbtn_1, saved_item_imgbtn_1_event_handler, LV_EVENT_ALL, ui);
+}
+
+static void taked_item_imgbtn_2_event_handler (lv_event_t *e)
+{
+    lv_event_code_t code = lv_event_get_code(e);
+    switch (code) {
+    case LV_EVENT_CLICKED:
+    {
+        lv_obj_remove_flag(guider_ui.taked_item_cont_1, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(guider_ui.taked_item_cont_2, LV_OBJ_FLAG_HIDDEN);
+        break;
+    }
+    default:
+        break;
+    }
+}
+
+static void taked_item_btnm_1_event_handler (lv_event_t *e)
+{
+    lv_event_code_t code = lv_event_get_code(e);
+    switch (code) {
+    case LV_EVENT_VALUE_CHANGED:
+    {
+        lv_obj_t * obj = lv_event_get_target(e);
+        uint32_t id = lv_buttonmatrix_get_selected_button(obj);
+
+        break;
+    }
+    default:
+        break;
+    }
 }
 
 static void taked_item_imgbtn_1_event_handler (lv_event_t *e)
@@ -249,9 +297,27 @@ static void taked_item_imgbtn_1_event_handler (lv_event_t *e)
     }
 }
 
+static void taked_item_btn_1_event_handler (lv_event_t *e)
+{
+    lv_event_code_t code = lv_event_get_code(e);
+    switch (code) {
+    case LV_EVENT_CLICKED:
+    {
+        lv_obj_add_flag(guider_ui.taked_item_cont_1, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(guider_ui.taked_item_cont_2, LV_OBJ_FLAG_HIDDEN);
+        break;
+    }
+    default:
+        break;
+    }
+}
+
 void events_init_taked_item (lv_ui *ui)
 {
+    lv_obj_add_event_cb(ui->taked_item_imgbtn_2, taked_item_imgbtn_2_event_handler, LV_EVENT_ALL, ui);
+    lv_obj_add_event_cb(ui->taked_item_btnm_1, taked_item_btnm_1_event_handler, LV_EVENT_ALL, ui);
     lv_obj_add_event_cb(ui->taked_item_imgbtn_1, taked_item_imgbtn_1_event_handler, LV_EVENT_ALL, ui);
+    lv_obj_add_event_cb(ui->taked_item_btn_1, taked_item_btn_1_event_handler, LV_EVENT_ALL, ui);
 }
 
 static void help_item_event_handler (lv_event_t *e)
@@ -323,6 +389,11 @@ static void setting_item_btn_1_event_handler (lv_event_t *e)
     case LV_EVENT_CLICKED:
     {
         lv_label_set_text(guider_ui.setting_item_label_1, "模组复位");
+        lv_span_set_text(guider_ui.setting_item_spangroup_1_span, "");
+        if (xst_cmd_reset() == MR_SUCCESS){
+            ESP_LOGI(XST_TAG , "xst has send : EF AA 10 00 00 10");
+            lv_span_set_text(guider_ui.setting_item_spangroup_1_span, "xst has send : EF AA 10 00 00 10");
+        }
         break;
     }
     default:
@@ -372,6 +443,97 @@ static void setting_item_btn_4_event_handler (lv_event_t *e)
     }
 }
 
+static void setting_item_btn_5_event_handler (lv_event_t *e)
+{
+    lv_event_code_t code = lv_event_get_code(e);
+    switch (code) {
+    case LV_EVENT_CLICKED:
+    {
+        lv_label_set_text(guider_ui.setting_item_label_1, "1号柜打开");
+        locker_on_off(&lockers[0],true);
+        vTaskDelay(pdMS_TO_TICKS(500));
+        locker_on_off(&lockers[0],false);
+        break;
+    }
+    default:
+        break;
+    }
+}
+
+static void setting_item_btn_6_event_handler (lv_event_t *e)
+{
+    lv_event_code_t code = lv_event_get_code(e);
+    switch (code) {
+    case LV_EVENT_CLICKED:
+    {
+        lv_label_set_text(guider_ui.setting_item_label_1, "2号柜打开");
+        locker_on_off(&lockers[1],true);
+        vTaskDelay(pdMS_TO_TICKS(500));
+        locker_on_off(&lockers[1],false);
+        break;
+    }
+    default:
+        break;
+    }
+}
+
+static void setting_item_btn_7_event_handler (lv_event_t *e)
+{
+    lv_event_code_t code = lv_event_get_code(e);
+    switch (code) {
+    case LV_EVENT_CLICKED:
+    {
+        lv_label_set_text(guider_ui.setting_item_label_1, "3号柜打开");
+        locker_on_off(&lockers[2],true);
+        vTaskDelay(pdMS_TO_TICKS(500));
+        locker_on_off(&lockers[2],false);
+        break;
+    }
+    default:
+        break;
+    }
+}
+
+static void setting_item_btn_8_event_handler (lv_event_t *e)
+{
+    lv_event_code_t code = lv_event_get_code(e);
+    switch (code) {
+    case LV_EVENT_CLICKED:
+    {
+        lv_label_set_text(guider_ui.setting_item_label_1, "4号柜打开");
+        locker_on_off(&lockers[3],true);
+        vTaskDelay(pdMS_TO_TICKS(500));
+        locker_on_off(&lockers[3],false);
+        break;
+    }
+    default:
+        break;
+    }
+}
+
+static void setting_item_btn_9_event_handler (lv_event_t *e)
+{
+    lv_event_code_t code = lv_event_get_code(e);
+    switch (code) {
+    case LV_EVENT_CLICKED:
+    {
+        lv_label_set_text(guider_ui.setting_item_label_1, "所有柜门均打开");
+        locker_on_off(&lockers[0],true);
+        locker_on_off(&lockers[1],true);
+        locker_on_off(&lockers[2],true);
+        locker_on_off(&lockers[3],true);
+        vTaskDelay(pdMS_TO_TICKS(500));
+        locker_on_off(&lockers[0],false);
+        locker_on_off(&lockers[1],false);
+        locker_on_off(&lockers[2],false);
+        locker_on_off(&lockers[3],false);
+        break;
+    }
+    default:
+        break;
+    }
+}
+
 void events_init_setting_item (lv_ui *ui)
 {
     lv_obj_add_event_cb(ui->setting_item, setting_item_event_handler, LV_EVENT_ALL, ui);
@@ -380,6 +542,11 @@ void events_init_setting_item (lv_ui *ui)
     lv_obj_add_event_cb(ui->setting_item_btn_2, setting_item_btn_2_event_handler, LV_EVENT_ALL, ui);
     lv_obj_add_event_cb(ui->setting_item_btn_3, setting_item_btn_3_event_handler, LV_EVENT_ALL, ui);
     lv_obj_add_event_cb(ui->setting_item_btn_4, setting_item_btn_4_event_handler, LV_EVENT_ALL, ui);
+    lv_obj_add_event_cb(ui->setting_item_btn_5, setting_item_btn_5_event_handler, LV_EVENT_ALL, ui);
+    lv_obj_add_event_cb(ui->setting_item_btn_6, setting_item_btn_6_event_handler, LV_EVENT_ALL, ui);
+    lv_obj_add_event_cb(ui->setting_item_btn_7, setting_item_btn_7_event_handler, LV_EVENT_ALL, ui);
+    lv_obj_add_event_cb(ui->setting_item_btn_8, setting_item_btn_8_event_handler, LV_EVENT_ALL, ui);
+    lv_obj_add_event_cb(ui->setting_item_btn_9, setting_item_btn_9_event_handler, LV_EVENT_ALL, ui);
 }
 
 

@@ -11,6 +11,7 @@
  *********************/
 #include "lv_port_indev.h"
 #include "esp_log.h"
+#include "esp_err.h"
 #include "../display/touch.h"
 
 /*********************
@@ -24,7 +25,7 @@ static touch_point_t touch_point = {0};
 /**********************
  *  STATIC VARIABLES
  **********************/            
-static void touchpad_init(void);
+static bool touchpad_init(void);
 static void touchpad_read(lv_indev_t * indev, lv_indev_data_t * data);
 static bool touchpad_is_pressed(void);
 static void touchpad_get_xy(int32_t * x, int32_t * y);
@@ -86,12 +87,14 @@ void lv_port_indev_init(void)
      * -----------------*/
 
     /*Initialize your touchpad if you have*/
-    touchpad_init();
-
-    /*Register a touchpad input device*/
-    indev_touchpad = lv_indev_create();
-    lv_indev_set_type(indev_touchpad, LV_INDEV_TYPE_POINTER);
-    lv_indev_set_read_cb(indev_touchpad, touchpad_read);
+    if (touchpad_init()) {
+        /*Register a touchpad input device*/
+        indev_touchpad = lv_indev_create();
+        lv_indev_set_type(indev_touchpad, LV_INDEV_TYPE_POINTER);
+        lv_indev_set_read_cb(indev_touchpad, touchpad_read);
+    } else {
+        ESP_LOGW("lv_port_indev", "Touch disabled, continue without LVGL input device");
+    }
 
     /*------------------
      * Mouse
@@ -173,13 +176,15 @@ void lv_port_indev_init(void)
  * -----------------*/
 
 /*Initialize your touchpad*/
-static void touchpad_init(void)
+static bool touchpad_init(void)
 {
     /*Initialize FT6336U touch controller*/
     esp_err_t err = touch_init();
     if (err != ESP_OK) {
-        ESP_LOGE("lv_port_indev", "Failed to initialize touch controller");
+        ESP_LOGE("lv_port_indev", "Failed to initialize touch controller: %s", esp_err_to_name(err));
+        return false;
     }
+    return true;
 }
 
 /*Will be called by the library to read the touchpad*/
@@ -187,6 +192,8 @@ static void touchpad_read(lv_indev_t * indev_drv, lv_indev_data_t * data)
 {
     static int32_t last_x = 0;
     static int32_t last_y = 0;
+
+    touch_read_point(&touch_point);
 
     /*Save the pressed coordinates and the state*/
     if(touchpad_is_pressed()) {
@@ -205,14 +212,12 @@ static void touchpad_read(lv_indev_t * indev_drv, lv_indev_data_t * data)
 /*Return true is the touchpad is pressed*/
 static bool touchpad_is_pressed(void)
 {
-    touch_read_point(&touch_point);
     return touch_point.is_pressed;
 }
 
 /*Get the x and y coordinates if the touchpad is pressed*/
 static void touchpad_get_xy(int32_t * x, int32_t * y)
 {
-    touch_read_point(&touch_point);
     (*x) = touch_point.y;
     (*y) = 240 -1 - touch_point.x;
 }

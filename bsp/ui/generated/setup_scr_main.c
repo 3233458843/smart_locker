@@ -46,7 +46,7 @@ void setup_scr_main(lv_ui *ui)
 
     //Write codes main_btnm_1
     ui->main_btnm_1 = lv_buttonmatrix_create(ui->main_cont_2);
-    lv_obj_set_pos(ui->main_btnm_1, 94, 54);
+    lv_obj_set_pos(ui->main_btnm_1, 93, 55);
     lv_obj_set_size(ui->main_btnm_1, 220, 180);
     static const char *main_btnm_1_text_map[] = {"1", "2", "3", "\n", "4", "5", "6", "\n", "7", "8", "9", "\n", "x", "0", "v", "",};
     lv_buttonmatrix_set_map(ui->main_btnm_1, main_btnm_1_text_map);
@@ -83,7 +83,7 @@ void setup_scr_main(lv_ui *ui)
 
     //Write codes main_label_4
     ui->main_label_4 = lv_label_create(ui->main_cont_2);
-    lv_obj_set_pos(ui->main_label_4, 103, 10);
+    lv_obj_set_pos(ui->main_label_4, 103, 15);
     lv_obj_set_size(ui->main_label_4, 40, 40);
     lv_label_set_text(ui->main_label_4, "_");
     lv_label_set_long_mode(ui->main_label_4, LV_LABEL_LONG_WRAP);
@@ -106,7 +106,7 @@ void setup_scr_main(lv_ui *ui)
 
     //Write codes main_label_5
     ui->main_label_5 = lv_label_create(ui->main_cont_2);
-    lv_obj_set_pos(ui->main_label_5, 160, 10);
+    lv_obj_set_pos(ui->main_label_5, 160, 15);
     lv_obj_set_size(ui->main_label_5, 40, 40);
     lv_label_set_text(ui->main_label_5, "_");
     lv_label_set_long_mode(ui->main_label_5, LV_LABEL_LONG_WRAP);
@@ -129,7 +129,7 @@ void setup_scr_main(lv_ui *ui)
 
     //Write codes main_label_6
     ui->main_label_6 = lv_label_create(ui->main_cont_2);
-    lv_obj_set_pos(ui->main_label_6, 214, 10);
+    lv_obj_set_pos(ui->main_label_6, 214, 15);
     lv_obj_set_size(ui->main_label_6, 40, 40);
     lv_label_set_text(ui->main_label_6, "_");
     lv_label_set_long_mode(ui->main_label_6, LV_LABEL_LONG_WRAP);
@@ -152,7 +152,7 @@ void setup_scr_main(lv_ui *ui)
 
     //Write codes main_label_7
     ui->main_label_7 = lv_label_create(ui->main_cont_2);
-    lv_obj_set_pos(ui->main_label_7, 270, 10);
+    lv_obj_set_pos(ui->main_label_7, 270, 15);
     lv_obj_set_size(ui->main_label_7, 40, 40);
     lv_label_set_text(ui->main_label_7, "_");
     lv_label_set_long_mode(ui->main_label_7, LV_LABEL_LONG_WRAP);
@@ -265,7 +265,19 @@ void setup_scr_main(lv_ui *ui)
     lv_obj_set_style_pad_bottom(ui->main_cont_1, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
     lv_obj_set_style_pad_left(ui->main_cont_1, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
     lv_obj_set_style_pad_right(ui->main_cont_1, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_image_src(ui->main_cont_1, &_3_RGB565A8_320x240, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_image_opa(ui->main_cont_1, 255, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_image_recolor_opa(ui->main_cont_1, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
     lv_obj_set_style_shadow_width(ui->main_cont_1, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+
+    //Write codes main_animimg_1
+    ui->main_animimg_1 = lv_animimg_create(ui->main_cont_1);
+    lv_obj_set_pos(ui->main_animimg_1, 244, 90);
+    lv_obj_set_size(ui->main_animimg_1, 70, 125);
+    lv_animimg_set_src(ui->main_animimg_1, (const void **) main_animimg_1_imgs, 39);
+    lv_animimg_set_duration(ui->main_animimg_1, 30*39);
+    lv_animimg_set_repeat_count(ui->main_animimg_1, LV_ANIM_REPEAT_INFINITE);
+    lv_animimg_start(ui->main_animimg_1);
 
     //Write codes main_btn_3
     ui->main_btn_3 = lv_button_create(ui->main_cont_1);
@@ -447,22 +459,6 @@ void setup_scr_main(lv_ui *ui)
     lv_obj_set_style_pad_left(ui->main_label_2, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
     lv_obj_set_style_shadow_width(ui->main_label_2, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
 
-    //Write codes main_led_4
-    ui->main_led_4 = lv_led_create(ui->main_cont_1);
-    lv_obj_set_pos(ui->main_led_4, 110, 60);
-    lv_obj_set_size(ui->main_led_4, 10, 10);
-    lv_led_set_brightness(ui->main_led_4, 255);
-    lv_led_set_color(ui->main_led_4, lv_color_hex(0x00a1b5));
-
-    //Write codes main_animimg_1
-    ui->main_animimg_1 = lv_animimg_create(ui->main_cont_1);
-    lv_obj_set_pos(ui->main_animimg_1, 246, 78);
-    lv_obj_set_size(ui->main_animimg_1, 70, 127);
-    lv_animimg_set_src(ui->main_animimg_1, (const void **) main_animimg_1_imgs, 39);
-    lv_animimg_set_duration(ui->main_animimg_1, 30*39);
-    lv_animimg_set_repeat_count(ui->main_animimg_1, LV_ANIM_REPEAT_INFINITE);
-    lv_animimg_start(ui->main_animimg_1);
-
     //Write codes main_img_1
     ui->main_img_1 = lv_image_create(ui->main_cont_1);
     lv_obj_set_pos(ui->main_img_1, 10, 5);
@@ -475,13 +471,6 @@ void setup_scr_main(lv_ui *ui)
     //Write style for main_img_1, Part: LV_PART_MAIN, State: LV_STATE_DEFAULT.
     lv_obj_set_style_image_recolor_opa(ui->main_img_1, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
     lv_obj_set_style_image_opa(ui->main_img_1, 255, LV_PART_MAIN|LV_STATE_DEFAULT);
-
-    //Write codes main_led_3
-    ui->main_led_3 = lv_led_create(ui->main_cont_1);
-    lv_obj_set_pos(ui->main_led_3, 45, 60);
-    lv_obj_set_size(ui->main_led_3, 10, 10);
-    lv_led_set_brightness(ui->main_led_3, 255);
-    lv_led_set_color(ui->main_led_3, lv_color_hex(0x00a1b5));
 
     //Write codes main_img_3
     ui->main_img_3 = lv_image_create(ui->main_cont_1);
@@ -522,19 +511,98 @@ void setup_scr_main(lv_ui *ui)
     lv_obj_set_style_image_recolor_opa(ui->main_img_4, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
     lv_obj_set_style_image_opa(ui->main_img_4, 255, LV_PART_MAIN|LV_STATE_DEFAULT);
 
-    //Write codes main_led_1
-    ui->main_led_1 = lv_led_create(ui->main_cont_1);
-    lv_obj_set_pos(ui->main_led_1, 45, 15);
-    lv_obj_set_size(ui->main_led_1, 10, 10);
-    lv_led_set_brightness(ui->main_led_1, 255);
-    lv_led_set_color(ui->main_led_1, lv_color_hex(0x00a1b5));
+    //Write codes main_cont_3
+    ui->main_cont_3 = lv_obj_create(ui->main_cont_1);
+    lv_obj_set_pos(ui->main_cont_3, 45, 10);
+    lv_obj_set_size(ui->main_cont_3, 20, 20);
+    lv_obj_set_scrollbar_mode(ui->main_cont_3, LV_SCROLLBAR_MODE_OFF);
 
-    //Write codes main_led_2
-    ui->main_led_2 = lv_led_create(ui->main_cont_1);
-    lv_obj_set_pos(ui->main_led_2, 110, 15);
-    lv_obj_set_size(ui->main_led_2, 10, 10);
-    lv_led_set_brightness(ui->main_led_2, 255);
-    lv_led_set_color(ui->main_led_2, lv_color_hex(0x00a1b5));
+    //Write style for main_cont_3, Part: LV_PART_MAIN, State: LV_STATE_DEFAULT.
+    lv_obj_set_style_border_width(ui->main_cont_3, 1, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_border_opa(ui->main_cont_3, 255, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_border_color(ui->main_cont_3, lv_color_hex(0x2195f6), LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_border_side(ui->main_cont_3, LV_BORDER_SIDE_FULL, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_radius(ui->main_cont_3, 10, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(ui->main_cont_3, 255, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(ui->main_cont_3, lv_color_hex(0x2FDA64), LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_grad_dir(ui->main_cont_3, LV_GRAD_DIR_NONE, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_top(ui->main_cont_3, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_bottom(ui->main_cont_3, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_left(ui->main_cont_3, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_right(ui->main_cont_3, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_shadow_width(ui->main_cont_3, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+
+    //Write codes main_cont_4
+    ui->main_cont_4 = lv_obj_create(ui->main_cont_1);
+    lv_obj_set_pos(ui->main_cont_4, 105, 10);
+    lv_obj_set_size(ui->main_cont_4, 20, 20);
+    lv_obj_set_scrollbar_mode(ui->main_cont_4, LV_SCROLLBAR_MODE_OFF);
+
+    //Write style for main_cont_4, Part: LV_PART_MAIN, State: LV_STATE_DEFAULT.
+    lv_obj_set_style_border_width(ui->main_cont_4, 1, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_border_opa(ui->main_cont_4, 255, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_border_color(ui->main_cont_4, lv_color_hex(0x2195f6), LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_border_side(ui->main_cont_4, LV_BORDER_SIDE_FULL, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_radius(ui->main_cont_4, 10, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(ui->main_cont_4, 255, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(ui->main_cont_4, lv_color_hex(0x2FDA64), LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_grad_dir(ui->main_cont_4, LV_GRAD_DIR_NONE, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_top(ui->main_cont_4, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_bottom(ui->main_cont_4, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_left(ui->main_cont_4, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_right(ui->main_cont_4, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_shadow_width(ui->main_cont_4, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+
+    //Write codes main_cont_5
+    ui->main_cont_5 = lv_obj_create(ui->main_cont_1);
+    lv_obj_set_pos(ui->main_cont_5, 45, 55);
+    lv_obj_set_size(ui->main_cont_5, 20, 20);
+    lv_obj_set_scrollbar_mode(ui->main_cont_5, LV_SCROLLBAR_MODE_OFF);
+
+    //Write style for main_cont_5, Part: LV_PART_MAIN, State: LV_STATE_DEFAULT.
+    lv_obj_set_style_border_width(ui->main_cont_5, 1, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_border_opa(ui->main_cont_5, 255, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_border_color(ui->main_cont_5, lv_color_hex(0x2195f6), LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_border_side(ui->main_cont_5, LV_BORDER_SIDE_FULL, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_radius(ui->main_cont_5, 10, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(ui->main_cont_5, 255, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(ui->main_cont_5, lv_color_hex(0x2FDA64), LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_grad_dir(ui->main_cont_5, LV_GRAD_DIR_NONE, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_top(ui->main_cont_5, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_bottom(ui->main_cont_5, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_left(ui->main_cont_5, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_right(ui->main_cont_5, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_shadow_width(ui->main_cont_5, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+
+    //Write codes main_cont_6
+    ui->main_cont_6 = lv_obj_create(ui->main_cont_1);
+    lv_obj_set_pos(ui->main_cont_6, 105, 55);
+    lv_obj_set_size(ui->main_cont_6, 20, 20);
+    lv_obj_set_scrollbar_mode(ui->main_cont_6, LV_SCROLLBAR_MODE_OFF);
+
+    //Write style for main_cont_6, Part: LV_PART_MAIN, State: LV_STATE_DEFAULT.
+    lv_obj_set_style_border_width(ui->main_cont_6, 1, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_border_opa(ui->main_cont_6, 255, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_border_color(ui->main_cont_6, lv_color_hex(0x2195f6), LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_border_side(ui->main_cont_6, LV_BORDER_SIDE_FULL, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_radius(ui->main_cont_6, 10, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(ui->main_cont_6, 255, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(ui->main_cont_6, lv_color_hex(0x2FDA64), LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_grad_dir(ui->main_cont_6, LV_GRAD_DIR_NONE, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_top(ui->main_cont_6, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_bottom(ui->main_cont_6, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_left(ui->main_cont_6, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_right(ui->main_cont_6, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+    lv_obj_set_style_shadow_width(ui->main_cont_6, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
+
+    //Write codes main_animimg_2
+    ui->main_animimg_2 = lv_animimg_create(ui->main_cont_1);
+    lv_obj_set_pos(ui->main_animimg_2, 132, 4);
+    lv_obj_set_size(ui->main_animimg_2, 106, 87);
+    lv_animimg_set_src(ui->main_animimg_2, (const void **) main_animimg_2_imgs, 9);
+    lv_animimg_set_duration(ui->main_animimg_2, 30*9);
+    lv_animimg_set_repeat_count(ui->main_animimg_2, LV_ANIM_REPEAT_INFINITE);
+    lv_animimg_start(ui->main_animimg_2);
 
     //The custom code of main.
 

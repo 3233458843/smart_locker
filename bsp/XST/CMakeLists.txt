@@ -5,6 +5,7 @@ idf_component_register( SRCS
                         REQUIRES
                             driver
                             freertos
+                            lwip
                             esp_driver_uart
                             log
                         )

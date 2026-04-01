@@ -15,6 +15,8 @@ extern "C" {
 #endif
 
 #include "gui_guider.h"
+#include "locker.h"
+#include "xst.h"
 
 void events_init(lv_ui *ui);
 

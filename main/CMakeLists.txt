@@ -4,6 +4,11 @@ idf_component_register(SRCS
                         "."
                     REQUIRES
                         esp_timer
+                        esp_wifi
+                        esp_driver_uart
+                        nvs_flash
+                        lwip
+                        locker
                         display
                         lvgl
                         lvgl_port

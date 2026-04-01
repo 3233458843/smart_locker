@@ -32,6 +32,7 @@ typedef struct
 	lv_obj_t *main_img_5;
 	lv_obj_t *main_label_8;
 	lv_obj_t *main_cont_1;
+	lv_obj_t *main_animimg_1;
 	lv_obj_t *main_btn_3;
 	lv_obj_t *main_btn_3_label;
 	lv_obj_t *main_btn_2;
@@ -43,25 +44,44 @@ typedef struct
 	lv_obj_t *main_btn_1_label;
 	lv_obj_t *main_label_3;
 	lv_obj_t *main_label_2;
-	lv_obj_t *main_led_4;
-	lv_obj_t *main_animimg_1;
 	lv_obj_t *main_img_1;
-	lv_obj_t *main_led_3;
 	lv_obj_t *main_img_3;
 	lv_obj_t *main_img_2;
 	lv_obj_t *main_img_4;
-	lv_obj_t *main_led_1;
-	lv_obj_t *main_led_2;
+	lv_obj_t *main_cont_3;
+	lv_obj_t *main_cont_4;
+	lv_obj_t *main_cont_5;
+	lv_obj_t *main_cont_6;
+	lv_obj_t *main_animimg_2;
 	lv_obj_t *saved_item;
 	bool saved_item_del;
 	lv_obj_t *saved_item_cont_1;
+	lv_obj_t *saved_item_label_2;
+	lv_obj_t *saved_item_label_1;
 	lv_obj_t *saved_item_imgbtn_1;
 	lv_obj_t *saved_item_imgbtn_1_label;
+	lv_obj_t *saved_item_animimg_1;
+	lv_obj_t *saved_item_bar_1;
+	lv_obj_t *saved_item_animimg_2;
+	lv_obj_t *saved_item_msgbox_1;
 	lv_obj_t *taked_item;
 	bool taked_item_del;
+	lv_obj_t *taked_item_cont_2;
+	lv_obj_t *taked_item_label_2;
+	lv_obj_t *taked_item_imgbtn_2;
+	lv_obj_t *taked_item_imgbtn_2_label;
+	lv_obj_t *taked_item_label_3;
+	lv_obj_t *taked_item_label_4;
+	lv_obj_t *taked_item_label_5;
+	lv_obj_t *taked_item_label_6;
+	lv_obj_t *taked_item_btnm_1;
 	lv_obj_t *taked_item_cont_1;
+	lv_obj_t *taked_item_label_1;
+	lv_obj_t *taked_item_img_1;
 	lv_obj_t *taked_item_imgbtn_1;
 	lv_obj_t *taked_item_imgbtn_1_label;
+	lv_obj_t *taked_item_btn_1;
+	lv_obj_t *taked_item_btn_1_label;
 	lv_obj_t *help_item;
 	bool help_item_del;
 	lv_obj_t *help_item_cont_1;
@@ -88,6 +108,16 @@ typedef struct
 	lv_obj_t *setting_item_btn_3_label;
 	lv_obj_t *setting_item_btn_4;
 	lv_obj_t *setting_item_btn_4_label;
+	lv_obj_t *setting_item_btn_5;
+	lv_obj_t *setting_item_btn_5_label;
+	lv_obj_t *setting_item_btn_6;
+	lv_obj_t *setting_item_btn_6_label;
+	lv_obj_t *setting_item_btn_7;
+	lv_obj_t *setting_item_btn_7_label;
+	lv_obj_t *setting_item_btn_8;
+	lv_obj_t *setting_item_btn_8_label;
+	lv_obj_t *setting_item_btn_9;
+	lv_obj_t *setting_item_btn_9_label;
 	lv_obj_t *setting_item_label_1;
 }lv_ui;
 
@@ -123,7 +153,8 @@ void setup_scr_help_item(lv_ui *ui);
 void setup_scr_setting_item(lv_ui *ui);
 LV_IMAGE_DECLARE(_back_RGB565A8_50x50);
 LV_IMAGE_DECLARE(_2_RGB565A8_90x91);
-LV_IMAGE_DECLARE(_setting_RGB565A8_40x40);
+
+LV_IMAGE_DECLARE(_3_RGB565A8_320x240);
 LV_IMAGE_DECLARE(main_animimg_11_00_floyd);
 LV_IMAGE_DECLARE(main_animimg_11_01_floyd);
 LV_IMAGE_DECLARE(main_animimg_11_02_floyd);
@@ -163,7 +194,68 @@ LV_IMAGE_DECLARE(main_animimg_11_35_floyd);
 LV_IMAGE_DECLARE(main_animimg_11_36_floyd);
 LV_IMAGE_DECLARE(main_animimg_11_37_floyd);
 LV_IMAGE_DECLARE(main_animimg_11_38_floyd);
+LV_IMAGE_DECLARE(_setting_RGB565A8_40x40);
 LV_IMAGE_DECLARE(_locker_RGB565A8_30x30);
+LV_IMAGE_DECLARE(main_animimg_22_0);
+LV_IMAGE_DECLARE(main_animimg_22_1);
+LV_IMAGE_DECLARE(main_animimg_22_2);
+LV_IMAGE_DECLARE(main_animimg_22_3);
+LV_IMAGE_DECLARE(main_animimg_22_4);
+LV_IMAGE_DECLARE(main_animimg_22_5);
+LV_IMAGE_DECLARE(main_animimg_22_6);
+LV_IMAGE_DECLARE(main_animimg_22_7);
+LV_IMAGE_DECLARE(main_animimg_22_8);
+LV_IMAGE_DECLARE(saved_item_animimg_19_00);
+LV_IMAGE_DECLARE(saved_item_animimg_19_01);
+LV_IMAGE_DECLARE(saved_item_animimg_19_02);
+LV_IMAGE_DECLARE(saved_item_animimg_19_03);
+LV_IMAGE_DECLARE(saved_item_animimg_19_04);
+LV_IMAGE_DECLARE(saved_item_animimg_19_05);
+LV_IMAGE_DECLARE(saved_item_animimg_19_06);
+LV_IMAGE_DECLARE(saved_item_animimg_19_07);
+LV_IMAGE_DECLARE(saved_item_animimg_19_08);
+LV_IMAGE_DECLARE(saved_item_animimg_19_09);
+LV_IMAGE_DECLARE(saved_item_animimg_19_10);
+LV_IMAGE_DECLARE(saved_item_animimg_19_11);
+LV_IMAGE_DECLARE(saved_item_animimg_19_12);
+LV_IMAGE_DECLARE(saved_item_animimg_19_13);
+LV_IMAGE_DECLARE(saved_item_animimg_19_14);
+LV_IMAGE_DECLARE(saved_item_animimg_19_15);
+LV_IMAGE_DECLARE(saved_item_animimg_19_16);
+LV_IMAGE_DECLARE(saved_item_animimg_19_17);
+LV_IMAGE_DECLARE(saved_item_animimg_19_18);
+LV_IMAGE_DECLARE(saved_item_animimg_19_19);
+LV_IMAGE_DECLARE(saved_item_animimg_19_20);
+LV_IMAGE_DECLARE(saved_item_animimg_19_21);
+LV_IMAGE_DECLARE(saved_item_animimg_19_22);
+LV_IMAGE_DECLARE(saved_item_animimg_19_23);
+LV_IMAGE_DECLARE(saved_item_animimg_19_24);
+LV_IMAGE_DECLARE(saved_item_animimg_19_25);
+LV_IMAGE_DECLARE(saved_item_animimg_19_26);
+LV_IMAGE_DECLARE(saved_item_animimg_19_27);
+LV_IMAGE_DECLARE(saved_item_animimg_19_28);
+LV_IMAGE_DECLARE(saved_item_animimg_19_29);
+LV_IMAGE_DECLARE(saved_item_animimg_19_30);
+LV_IMAGE_DECLARE(saved_item_animimg_19_31);
+LV_IMAGE_DECLARE(saved_item_animimg_19_32);
+LV_IMAGE_DECLARE(saved_item_animimg_19_33);
+LV_IMAGE_DECLARE(saved_item_animimg_19_34);
+LV_IMAGE_DECLARE(saved_item_animimg_19_35);
+LV_IMAGE_DECLARE(saved_item_animimg_19_36);
+LV_IMAGE_DECLARE(saved_item_animimg_19_37);
+LV_IMAGE_DECLARE(saved_item_animimg_19_38);
+LV_IMAGE_DECLARE(saved_item_animimg_19_39);
+LV_IMAGE_DECLARE(saved_item_animimg_25_00_tresh_RLE);
+LV_IMAGE_DECLARE(saved_item_animimg_25_01_tresh_RLE);
+LV_IMAGE_DECLARE(saved_item_animimg_25_02_tresh_RLE);
+LV_IMAGE_DECLARE(saved_item_animimg_25_03_tresh_RLE);
+LV_IMAGE_DECLARE(saved_item_animimg_25_04_tresh_RLE);
+LV_IMAGE_DECLARE(saved_item_animimg_25_05_tresh_RLE);
+LV_IMAGE_DECLARE(saved_item_animimg_25_06_tresh_RLE);
+LV_IMAGE_DECLARE(saved_item_animimg_25_07_tresh_RLE);
+LV_IMAGE_DECLARE(saved_item_animimg_25_08_tresh_RLE);
+LV_IMAGE_DECLARE(saved_item_animimg_25_09_tresh_RLE);
+LV_IMAGE_DECLARE(_10_RGB565A8_100x100);
 
 LV_FONT_DECLARE(lv_font_montserratMedium_16)
 LV_FONT_DECLARE(lv_font_montserratMedium_12)
@@ -172,6 +264,7 @@ LV_FONT_DECLARE(lv_font_LXGWWenKaiMono_Medium_25)
 LV_FONT_DECLARE(lv_font_LXGWWenKaiMono_Medium_20)
 LV_FONT_DECLARE(lv_font_LXGWWenKaiMono_Medium_16)
 LV_FONT_DECLARE(lv_font_LXGWWenKaiMono_Medium_17)
+LV_FONT_DECLARE(lv_font_Lemi_Little_Milk_Foam_Font_18)
 LV_FONT_DECLARE(lv_font_Lemi_Little_Milk_Foam_Font_29)
 
 

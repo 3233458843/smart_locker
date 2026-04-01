@@ -28,7 +28,7 @@
 
 #define BYTE_PER_PIXEL (LV_COLOR_FORMAT_GET_SIZE(LV_COLOR_FORMAT_RGB565)) /*will be 2 for RGB565 */
 
-#define RENDER_BUF_LINES    60
+#define RENDER_BUF_LINES    40
 /**********************
  *      TYPEDEFS
  **********************/
