@@ -15,16 +15,14 @@ extern "C" {
 #endif
 
 #include "gui_guider.h"
-#include "locker.h"
-#include "xst.h"
 
 void events_init(lv_ui *ui);
 
 void events_init_main(lv_ui *ui);
-void events_init_saved_item(lv_ui *ui);
-void events_init_taked_item(lv_ui *ui);
-void events_init_help_item(lv_ui *ui);
-void events_init_setting_item(lv_ui *ui);
+void events_init_take_page(lv_ui *ui);
+void events_init_save_page(lv_ui *ui);
+void events_init_help_page(lv_ui *ui);
+void events_init_setting_page(lv_ui *ui);
 
 #ifdef __cplusplus
 }

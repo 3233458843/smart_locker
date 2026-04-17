@@ -2,6 +2,7 @@
 <project version="4">
   <component name="VcsDirectoryMappings">
     <mapping directory="" vcs="Git" />
+    <mapping directory="D:/ESP_IDF/Espressif/frameworks/esp-idf-v5.3.3" vcs="Git" />
     <mapping directory="D:/ESP_IDF/Espressif/frameworks/esp-idf-v5.3.3/components/bootloader/subproject/components/micro-ecc/micro-ecc" vcs="Git" />
     <mapping directory="D:/ESP_IDF/Espressif/frameworks/esp-idf-v5.3.3/components/bt/controller/lib_esp32" vcs="Git" />
     <mapping directory="D:/ESP_IDF/Espressif/frameworks/esp-idf-v5.3.3/components/bt/controller/lib_esp32c2/esp32c2-bt-lib" vcs="Git" />

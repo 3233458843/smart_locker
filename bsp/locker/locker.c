@@ -3,6 +3,9 @@
 #include "driver/gpio.h"
 #include "esp_random.h"
 #include <errno.h>
+#include "freertos/FreeRTOS.h"
+#include <freertos/projdefs.h>
+#include <freertos/task.h>
 
 #define TAG "LOCKER"
 
@@ -14,19 +17,19 @@ void locker_init(void){
     error_t err;
     // 初始化锁的状态和 GPIO 引脚
     lockers[0] = (locker_t){
-        .locker_info = {.locker_user_info = {0}, .locker_user_info_id = {0, 0}}, .locker_id = 0 , .is_locked = false,
+        .locker_info = {.locker_user_info = {0}, .locker_user_info_id = {0, 0}}, .locker_id = 0 , .is_locked = false,.have_saved = false,
         .locker_pin = LOCKER1_GPIO_PIN, .locker_detection_pin = LOCKER1_Detection_GPIO_PIN, .password = {0, 0, 0, 0}
     };
     lockers[1] = (locker_t){
-        .locker_info = {.locker_user_info = {0}, .locker_user_info_id = {0, 0}}, .locker_id = 1 ,.is_locked = false,
+        .locker_info = {.locker_user_info = {0}, .locker_user_info_id = {0, 0}}, .locker_id = 1 ,.is_locked = false,.have_saved = false,
         .locker_pin = LOCKER2_GPIO_PIN, .locker_detection_pin = LOCKER2_Detection_GPIO_PIN, .password = {0, 0, 0, 0}
     };
     lockers[2] = (locker_t){
-        .locker_info = {.locker_user_info = {0}, .locker_user_info_id = {0, 0}}, .locker_id = 2 ,.is_locked = false,
+        .locker_info = {.locker_user_info = {0}, .locker_user_info_id = {0, 0}}, .locker_id = 2 ,.is_locked = false,.have_saved = false,
         .locker_pin = LOCKER3_GPIO_PIN, .locker_detection_pin = LOCKER3_Detection_GPIO_PIN, .password = {0, 0, 0, 0}
     };
     lockers[3] = (locker_t){
-        .locker_info = {.locker_user_info = {0}, .locker_user_info_id = {0, 0}}, .locker_id = 3 ,.is_locked = false,
+        .locker_info = {.locker_user_info = {0}, .locker_user_info_id = {0, 0}}, .locker_id = 3 ,.is_locked = false,.have_saved = false,
         .locker_pin = LOCKER4_GPIO_PIN, .locker_detection_pin = LOCKER4_Detection_GPIO_PIN, .password = {0, 0, 0, 0}
     };
 
@@ -69,22 +72,47 @@ void locker_init(void){
     gpio_dump_io_configuration(stdout, (1ULL << lockers[0].locker_detection_pin) | (1ULL << lockers[1].locker_detection_pin) | (1ULL << lockers[2].locker_detection_pin) | (1ULL << lockers[3].locker_detection_pin));
 }
 
-/// @brief 打开或关闭锁
-/// @param locker 需打开或关闭的锁实例
-/// @param lock 锁定状态，true 表示锁定，false 表示解锁
-void locker_on_off(locker_t* locker, bool lock){
+/** 打开指定锁
+ *
+ * @param locker
+ */
+void locker_on(locker_t* locker){
     if (locker == NULL){
         ESP_LOGE(TAG, "Locker pointer is NULL");
         return;
     }
-    locker->is_locked = lock;
-    esp_err_t err = gpio_set_level(locker->locker_pin, lock ? 1 : 0);
+    esp_err_t err = gpio_set_level(locker->locker_pin, 1);
     if (err != ESP_OK){
         ESP_LOGE(TAG, "Failed to set GPIO level for locker: %s", esp_err_to_name(err));
     }
-    else{
-        ESP_LOGI(TAG, "Locker%d %s",locker->locker_id, lock ? "locked" : "unlocked");
+    else if (err == ESP_OK){
+        locker->is_locked = true;
+        ESP_LOGI(TAG, "Locker %d opened", locker->locker_id + 1);
     }
+    vTaskDelay(pdMS_TO_TICKS(500)); // 延时 50ms，确保机械动作完成
+
+    err = gpio_set_level(locker->locker_pin, 0);
+
+    if (err != ESP_OK){
+        ESP_LOGE(TAG, "Failed to set GPIO level for locker: %s", esp_err_to_name(err));
+    }
+    else if (err == ESP_OK){
+        locker->is_locked = false;
+        ESP_LOGI(TAG, "Locker %d closed", locker->locker_id + 1);
+    }
+}
+
+/** 打开所有锁
+ *
+ */
+void locker_all_on(void){
+    locker_on(&lockers[0]);
+    vTaskDelay(pdMS_TO_TICKS(50));
+    locker_on(&lockers[1]);
+    vTaskDelay(pdMS_TO_TICKS(50));
+    locker_on(&lockers[2]);
+    vTaskDelay(pdMS_TO_TICKS(50));
+    locker_on(&lockers[3]);
 }
 
 /// @brief 根据用户信息 ID 获取对应的锁实例
@@ -128,7 +156,38 @@ bool Detection_locker_on_off(const locker_t* locker){
         return 0;
     }
     if (gpio_get_level(locker->locker_detection_pin) == 0){
-        return true;
+        return false;
     }
-    return false;
+    return true;
 }
+
+/**
+ * 判断柜子是否存放物品
+ * @param locker 要检测的柜号
+ * @return true:柜子内存放有物品  false:柜子内无物品
+ * @note 物品存放状态独立于门开关状态，仅由 have_saved 标志决定
+ */
+bool has_item_in_locker(const locker_t* locker){
+    if (locker == NULL){
+        ESP_LOGE(TAG, "Locker pointer is NULL");
+        return false;
+    }
+    // 物品存放判断：仅由 have_saved 标志决定
+    return locker->have_saved;
+}
+
+/**
+ * 判断柜子是否处于安全状态（已存物且门已关闭）
+ * @param locker 要检测的柜号
+ * @return true:柜子内有物品且门已关闭  false:其他情况
+ * @note 用于验证用户完成存物流程
+ */
+bool is_locker_secured(const locker_t* locker){
+    if (locker == NULL){
+        ESP_LOGE(TAG, "Locker pointer is NULL");
+        return false;
+    }
+    // 安全状态判断：有物品且门关闭
+    return locker->have_saved && (!Detection_locker_on_off(locker));
+}
+

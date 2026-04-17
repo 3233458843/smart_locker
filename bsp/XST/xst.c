@@ -25,7 +25,7 @@ static uint32_t parse_len = 0;
 static SemaphoreHandle_t xst_parse_sem = NULL; // 二值信号量，用于唤醒解析任务
 static SemaphoreHandle_t xst_list_mutex = NULL; // 互斥锁，用于保护待解析数据链表
 
-//待解析帧的数据节点链表
+//解析帧的数据节点链表
 typedef struct parse_item{
     uint8_t msg_id;
     uint16_t data_len;
@@ -139,8 +139,7 @@ static void xst_send_packet(uint8_t msg_id, uint8_t* data, uint16_t len){
     // 计算并写入校验和
     tx_buf[total_len - 1] = xst_calc_checksum(msg_id, len, data);
 
-    if (g_vofa_client_fd != -1) {
-
+    if (g_vofa_client_fd != -1){
         send(g_vofa_client_fd, tx_buf, total_len, MSG_DONTWAIT);
     }
 
@@ -319,11 +318,11 @@ static void xst_uart_rx_task(void* param){
 
             // ================= 提取出完整帧 =================
 
-            // [功能1] 打印接收到的原始 HEX 数据
+            // 打印接收到的原始 HEX 数据
             ESP_LOGI(XST_TAG, "\n<<<<<<<<<<<<<<<<<<<<<<< [ UART 接收 ] <<<<<<<<<<<<<<<<<<<<<<<");
             ESP_LOGI(XST_TAG, "=> 捕获完整帧，总长: %lu 字节", (unsigned long)frame_total_len);
             esp_log_buffer_hex(XST_TAG "-RX", parse_buf, frame_total_len);
-            if (g_vofa_client_fd != -1) {
+            if (g_vofa_client_fd != -1){
                 // 使用非阻塞方式发送，防止 WiFi 断开时卡死串口任务
                 send(g_vofa_client_fd, parse_buf, frame_total_len, MSG_DONTWAIT);
             }
@@ -361,7 +360,7 @@ static void xst_uart_rx_task(void* param){
                     }
                     xSemaphoreGive(xst_list_mutex);
 
-                    // 【核心】释放二值信号量，通知解析任务干活
+                    // 释放二值信号量，通知解析任务干活
                     xSemaphoreGive(xst_parse_sem);
                 }
             }
@@ -384,12 +383,26 @@ static void xst_uart_rx_task(void* param){
 /*******************************************************************************
  *                               API 实现
  ******************************************************************************/
-
+ 
 void xst_init(xst_note_callback_t callback){
     g_note_callback = callback;
+    //初始化XST模组电源控制引脚
+    const gpio_config_t xst_power_pin = {
+        .pin_bit_mask = (1ULL << XST_POWER_PIN),
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
 
+    esp_err_t err = gpio_config(&xst_power_pin);
+    if (err != ESP_OK){
+        ESP_LOGE(XST_TAG, "XST POWER PIN config error!!!");
+    }
+    //低电平模组给电
+    gpio_set_level(XST_POWER_PIN , 0);
     // 初始化串口
-    uart_config_t uart_config = {
+    const uart_config_t uart_config = {
         .baud_rate = XST_BAUD_RATE,
         .data_bits = UART_DATA_8_BITS,
         .parity = UART_PARITY_DISABLE,
@@ -455,10 +468,22 @@ static xst_result_t xst_exec_cmd(uint8_t cmd, uint8_t* tx_data, uint16_t tx_len,
 
 // ============== 其余向外暴露的API保持原样不变 ==============
 
+/** XST模组复位
+ *
+ * @return xst_result_t 错误码
+ */
 xst_result_t xst_cmd_reset(void){
+    gpio_set_level(XST_POWER_PIN , 1 );
+    vTaskDelay(pdMS_TO_TICKS(500));
+    gpio_set_level(XST_POWER_PIN , 0);
     return xst_exec_cmd(MID_RESET, NULL, 0, NULL, NULL, 2000);
 }
 
+/** 获取XST模组状态
+ *
+ * @param status 状态码指针，成功时写入状态值
+ * @return xst_result_t 错误码
+ */
 xst_result_t xst_cmd_get_status(uint8_t* status){
     uint8_t* data = NULL;
     uint16_t len = 0;
@@ -468,6 +493,14 @@ xst_result_t xst_cmd_get_status(uint8_t* status){
     return res;
 }
 
+/** 添加用户
+ *
+ * @param name 用户名，最长31字节，内部会自动添加结尾符
+ * @param admin 权限，0-255，数值越大权限越高
+ * @param timeout 采集超时时间，单位秒，建议20-60秒
+ * @param out_user_id 新用户ID指针，成功时写入新用户ID，失败时不修改
+ * @return
+ */
 xst_result_t xst_cmd_enroll_single(const char* name, uint8_t admin, uint8_t timeout, uint16_t* out_user_id){
     xst_enroll_param_t param;
     memset(&param, 0, sizeof(param));
@@ -488,6 +521,13 @@ xst_result_t xst_cmd_enroll_single(const char* name, uint8_t admin, uint8_t time
     return res;
 }
 
+/** 验证用户
+ *
+ * @param timeout 验证超时时间，单位秒，建议20-60秒
+ * @param out_user_id 用户ID指针，成功时写入用户ID，失败时不修改
+ * @param out_name 用户名指针，成功时写入用户名，失败时不修改
+ * @return xst_result_t 错误码
+ */
 xst_result_t xst_cmd_verify(uint8_t timeout, uint16_t* out_user_id, char* out_name){
     uint8_t req[2] = {0, timeout};
     uint8_t* data = NULL;
@@ -507,15 +547,29 @@ xst_result_t xst_cmd_verify(uint8_t timeout, uint16_t* out_user_id, char* out_na
     return res;
 }
 
+/** XST删除指定用户
+ *
+ * @param user_id 用户ID
+ * @return xst_result_t 错误码
+ */
 xst_result_t xst_cmd_del_user(uint16_t user_id){
     uint8_t req[2] = {(user_id >> 8) & 0xFF, user_id & 0xFF};
     return xst_exec_cmd(MID_DEL_USER, req, 2, NULL, NULL, 10000);
 }
 
+/** XST删除所有用户
+ *
+ * @return xst_result_t 错误码
+ */
 xst_result_t xst_cmd_del_all(void){
     return xst_exec_cmd(MID_DEL_ALL, NULL, 0, NULL, NULL, 10000);
 }
 
+/** XST获取已注册的用户
+ *
+ * @param count 用户数量指针，成功时写入用户数量，失败时不修改
+ * @return xst_result_t 错误码
+ */
 xst_result_t xst_cmd_get_user_count(uint16_t* count){
     uint8_t* data = NULL;
     uint16_t len = 0;

@@ -218,8 +218,8 @@ static bool touchpad_is_pressed(void)
 /*Get the x and y coordinates if the touchpad is pressed*/
 static void touchpad_get_xy(int32_t * x, int32_t * y)
 {
-    (*x) = touch_point.y;
-    (*y) = 240 -1 - touch_point.x;
+    (*x) = touch_point.x;
+    (*y) = touch_point.y;
 }
 
 /*------------------

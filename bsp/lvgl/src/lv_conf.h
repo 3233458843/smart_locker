@@ -53,7 +53,7 @@
 
 #if LV_USE_STDLIB_MALLOC == LV_STDLIB_BUILTIN
     /*Size of the memory available for `lv_malloc()` in bytes (>= 2kB)*/
-    #define LV_MEM_SIZE (54 * 1024U)          /*[bytes]*/
+    #define LV_MEM_SIZE (60 * 1024U)          /*[bytes]*/
 
     /*Size of the memory expand for `lv_malloc()` in bytes*/
     #define LV_MEM_POOL_EXPAND_SIZE 0
@@ -72,11 +72,11 @@
  *====================*/
 
 /*Default display refresh, input device read and animation step period.*/
-#define LV_DEF_REFR_PERIOD  5      /*[ms]*/
+#define LV_DEF_REFR_PERIOD  15      /*[ms]*/
 
 /*Default Dot Per Inch. Used to initialize default sizes such as widgets sized, style paddings.
  *(Not so important, you can adjust it to modify default sizes and spaces)*/
-#define LV_DPI_DEF 100     /*[px/inch]*/
+#define LV_DPI_DEF 130     /*[px/inch]*/
 
 /*=================
  * OPERATING SYSTEM
@@ -90,7 +90,7 @@
  * - LV_OS_WINDOWS
  * - LV_OS_MQX
  * - LV_OS_CUSTOM */
-#define LV_USE_OS   LV_OS_NONE
+#define LV_USE_OS   LV_OS_FREERTOS
 
 #if LV_USE_OS == LV_OS_CUSTOM
     #define LV_OS_CUSTOM_INCLUDE <stdint.h>
@@ -131,7 +131,7 @@
 /* The stack size of the drawing thread.
  * NOTE: If FreeType or ThorVG is enabled, it is recommended to set it to 32KB or more.
  */
-#define LV_DRAW_THREAD_STACK_SIZE    (8 * 1024)   /*[bytes]*/
+#define LV_DRAW_THREAD_STACK_SIZE    (10 * 1024)   /*[bytes]*/
 
 #define LV_USE_DRAW_SW 1
 #if LV_USE_DRAW_SW == 1
@@ -704,7 +704,7 @@
 #define LV_USE_FLEX 1
 
 /*A layout similar to Grid in CSS.*/
-#define LV_USE_GRID 1
+#define LV_USE_GRID 0
 
 /*====================
  * 3RD PARTS LIBRARIES
@@ -788,7 +788,7 @@
 #define LV_USE_LIBJPEG_TURBO 0
 
 /*GIF decoder library*/
-#define LV_USE_GIF 0
+#define LV_USE_GIF 1
 #if LV_USE_GIF
     /*GIF decoder accelerate*/
     #define LV_GIF_CACHE_DECODE_DATA 0
@@ -802,7 +802,7 @@
 #define LV_USE_RLE 0
 
 /*QR code library*/
-#define LV_USE_QRCODE 0
+#define LV_USE_QRCODE 1
 
 /*Barcode code library*/
 #define LV_USE_BARCODE 0
@@ -967,7 +967,7 @@
     #define LV_SDL_RENDER_MODE      LV_DISPLAY_RENDER_MODE_DIRECT   /*LV_DISPLAY_RENDER_MODE_DIRECT is recommended for best performance*/
     #define LV_SDL_BUF_COUNT        1    /*1 or 2*/
     #define LV_SDL_ACCELERATED      1    /*1: Use hardware acceleration*/
-    #define LV_SDL_FULLSCREEN       0    /*1: Make the window full screen by default*/
+    #define LV_SDL_FULLSCREEN       1    /*1: Make the window full screen by default*/
     #define LV_SDL_DIRECT_EXIT      1    /*1: Exit the application when all SDL windows are closed*/
     #define LV_SDL_MOUSEWHEEL_MODE  LV_SDL_MOUSEWHEEL_MODE_ENCODER  /*LV_SDL_MOUSEWHEEL_MODE_ENCODER/CROWN*/
 #endif
@@ -1045,7 +1045,7 @@
 
 /*Drivers for LCD devices connected via SPI/parallel port*/
 #define LV_USE_ST7735        0
-#define LV_USE_ST7789        0
+#define LV_USE_ST7789        1
 #define LV_USE_ST7796        0
 #define LV_USE_ILI9341       0
 

@@ -9,6 +9,7 @@ idf_component_register(SRCS
                         nvs_flash
                         lwip
                         locker
+                        buzzer
                         display
                         lvgl
                         lvgl_port

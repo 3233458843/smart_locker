@@ -51,12 +51,12 @@ typedef enum {
 } xst_result_t;
 
 // 通知ID定义
-#define NID_READY                       0
-#define NID_FACE_STATE                  1
-#define NID_UNKNOWNERROR                2
-#define NID_OTA_DONE                    3
-#define NID_PALM_STATE                  4
-#define NID_AUTHORIZATION               8
+#define NID_READY                       0 // 模块已就绪
+#define NID_FACE_STATE                  1 // 模块状态更新
+#define NID_UNKNOWNERROR                2 // 模块发生异常
+#define NID_OTA_DONE                    3 // OTA升级完成
+#define NID_PALM_STATE                  4 // 掌静脉状态更新
+#define NID_AUTHORIZATION               8 // 授权结果通知
 
 // 协议包头结构 
 typedef struct __attribute__((packed)) {

@@ -73,10 +73,10 @@ void init_scr_del_flag(lv_ui *ui)
 {
 
     ui->main_del = true;
-    ui->saved_item_del = true;
-    ui->taked_item_del = true;
-    ui->help_item_del = true;
-    ui->setting_item_del = true;
+    ui->take_page_del = true;
+    ui->save_page_del = true;
+    ui->help_page_del = true;
+    ui->setting_page_del = true;
 }
 
 void setup_bottom_layer(void)

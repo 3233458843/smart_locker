@@ -2,7 +2,7 @@
 #define _LOCKER_H_
 
 #include <stdio.h>
-#include <stdbool.h> 
+#include <stdbool.h>
 #include <string.h>
 #include "xst_pack_t.h"
 
@@ -20,26 +20,30 @@
 #define LOCKER3_Detection_GPIO_PIN GPIO_NUM_17 //柜号3检测是否关闭
 #define LOCKER4_Detection_GPIO_PIN GPIO_NUM_18 //柜号4检测是否关闭
 
-typedef struct {
-    uint8_t locker_user_info[locker_user_info_max_len]; 
+typedef struct{
+    uint8_t locker_user_info[locker_user_info_max_len];
     uint8_t locker_user_info_id[2]; // 用户信息 ID
-}locker_info_t;
+} locker_info_t;
 
-typedef struct {
+typedef struct{
     locker_info_t locker_info; // 锁用户信息
     uint8_t locker_id;
-    bool is_locked; // 锁状态
-    uint8_t locker_pin ;// 锁控 GPIO 引脚
-    uint8_t locker_detection_pin ; //检测引脚
+    bool is_locked; // 锁状态  true代表锁已打开 false代表锁已关闭
+    bool have_saved; // 是否存物 true代表改柜号已存放物品 ，false代表该柜号还未存放物品
+    uint8_t locker_pin; // 锁控 GPIO 引脚
+    uint8_t locker_detection_pin; //检测引脚
     uint8_t password[4]; // 锁密码，4 位数字
 } locker_t;
 
 extern locker_t lockers[4]; // 声明 4 个锁实例
 
 void locker_init(void);
-void locker_on_off(locker_t *locker, bool lock);
+void locker_on(locker_t* locker);
+void locker_all_on(void);
 locker_t* get_locker_by_id(uint8_t* id);
 void crumble_password(uint8_t* password);
 bool Detection_locker_on_off(const locker_t* locker);
+bool has_item_in_locker(const locker_t* locker);
+bool is_locker_secured(const locker_t* locker);
 
 #endif /* _LOCKER_H_ */

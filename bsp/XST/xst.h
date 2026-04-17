@@ -10,10 +10,11 @@ extern int g_vofa_client_fd; // 声明全局 Socket 句柄
 
 #define XST_TAG         "xst"
 
-#define XST_UART_NUM    UART_NUM_1
-#define XST_TX_PIN      GPIO_NUM_5
-#define XST_RX_PIN      GPIO_NUM_4
-#define XST_BAUD_RATE   115200
+#define XST_POWER_PIN      GPIO_NUM_42 // XST电源 PIN
+#define XST_UART_NUM    UART_NUM_1 //XST串口号
+#define XST_TX_PIN      GPIO_NUM_5 //XST TX
+#define XST_RX_PIN      GPIO_NUM_4 //XST RX
+#define XST_BAUD_RATE   115200 //XST串口波特率
 
 typedef void (*xst_note_callback_t)(uint8_t nid, uint8_t *data, uint16_t len);
 
