@@ -4,23 +4,12 @@
 这是一个基于 `ESP32-S3` + `ESP-IDF` + `LVGL` 的智能储物柜控制项目。  
 当前代码已完成显示、触摸、柜门 GPIO 控制、XST 掌静脉模组通信，以及 SoftAP + TCP 指令转发调试链路。
 
-## 当前进度（2026-04-17）
+## 当前进度（2026-04-22）
 ### 本次修订点
-- 将 README 内容从泛化项目介绍，修正为与当前代码实现一致的状态说明。
-- 重新梳理 `已完成`、`进行中`、`已知问题`、`下一步计划`，避免把未接通功能写成已完成。
-- 明确 Setting 页、Take 页、Save 页、XST 协议栈、WiFi 调试链路的实际落地情况。
-- 补充当前硬编码项、未实现接口、UI 刷新缺口、`crumble_password()` 缺陷等真实问题。
-- 标注 `bsp/ui/generated/events_init.c` 中存在手写业务逻辑，提示后续重新生成 UI 时有覆盖风险。
-
-### 本次修订补充（蜂鸣器驱动）
-- **完成 Buzzer 驱动框架设计与实现**：
-  - 外部设备注册机制：支持最多 4 个蜂鸣器设备同时注册
-  - 句柄管理：使用 opaque handle 进行资源封装和访问控制
-  - 内部状态机：4 种状态（OFF/ON/BEEPING/IDLE/ERROR）
-  - 设备抽象层：基于 ops 结构体的多态接口
-  - GPIO 蜂鸣器具体实现：支持 on/off 以及 6 种预定义蜂鸣模式
-  - 线程安全：FreeRTOS 互斥锁保护设备资源
-  - 异步蜂鸣控制：FreeRTOS Timer 管理蜂鸣模式的自动关闭
+- 完善存件和取件业务逻辑
+- 集成 serve 模块实现业务服务层
+- 添加主页实时状态更新
+- 完成完整的存取件流程
 
 ### 已完成
 - **基础框架**：`ESP-IDF 5.3.3`，目标芯片 `esp32s3`。
@@ -49,6 +38,13 @@
   - `get_locker_by_id()` — 根据用户 ID 查找柜门
   - `crumble_password()` — 随机密码生成
   - `gpio_dump_io_configuration()` — GPIO 配置转储
+- **用户-柜号数据库**：NVS 持久化存储，支持：
+  - `locker_db_init()` — 从 NVS 恢复数据
+  - `locker_db_add_entry()` — 添加用户绑定
+  - `locker_db_get_entry_by_user()` — 按用户查找
+  - `locker_db_get_entry_by_locker()` — 按柜号查找
+  - `locker_db_find_free_locker()` — 查找空闲柜
+  - `locker_db_save_to_nvs()` — 保存到 NVS
 - **蜂鸣器驱动框架** (`bsp/buzzer/`)：
   - ✅ **外部设备注册**：支持最多 4 个蜂鸣器设备，通过 `buzzer_register_device()` 动态注册
   - ✅ **句柄管理**：使用 opaque handle（`buzzer_handle_t`）进行资源封装，`buzzer_get_handle()` 获取
@@ -59,26 +55,42 @@
   - ✅ **异步蜂鸣控制**：使用 FreeRTOS 定时器（Timer）自动管理蜂鸣模式和关闭
   - ✅ **完成回调通知**：蜂鸣完成时触发注册的回调函数
   - ✅ **调试工具**：`buzzer_dump_devices()` 和 `buzzer_get_device_info()` 用于调试
+- **业务服务层** (`serve/`)：
+  - ✅ **信号量同步**：`ready_save`/`ready_take`/`verify_debug` 三路信号量
+  - ✅ **多任务架构**：独立任务处理存件/取件/调试业务
+  - ✅ **业务解耦**：UI 层通过信号量触发业务逻辑
+- **存件流程**：
+  - ✅ **异步录入**：`save_page_enroll_task` 独立任务处理掌脉录入
+  - ✅ **自动分配**：`locker_db_find_free_locker()` 查找空闲柜号
+  - ✅ **密码生成**：随机4位数字密码（0-9）
+  - ✅ **数据绑定**：创建 `user_locker_entry_t` 并保存到 NVS
+  - ✅ **UI 反馈**：显示分配的柜号和密码
+  - ✅ **蜂鸣提示**：成功音反馈
+- **取件流程**：
+  - ✅ **双模式支持**：扫脉识别 + 密码输入
+  - ✅ **异步识别**：`take_page_verify_task` 独立任务处理扫脉
+  - ✅ **密码验证**：硬编码密码"0000"（可扩展为动态密码）
+  - ✅ **柜号匹配**：根据密码查找对应柜号
+  - ✅ **自动开门**：`locker_on()` 控制柜门
+  - ✅ **状态反馈**：UI 显示操作结果
 - **Setting 页面部分按钮已打通**：
   - `RES` → `xst_cmd_reset()`
   - `locker1/2/3/4` → `locker_on(&lockers[0/1/2/3])`
   - `ALL` → `locker_all_on()`
-- **主页面柜门状态显示**：启动时会读取 4 路门磁输入，并在首页用红/绿块显示一次初始状态。
-- **Take 页面**：扫脉界面（`cont_1`）与密码界面（`cont_2`）可切换；密码当前硬编码为 `0000`，验证后只更新提示文案，无实际开门。
+- **主页实时状态更新**：`main_serve` 任务每秒刷新4个柜子的红绿状态指示
+- **Take 页面**：扫脉界面（`cont_1`）与密码界面（`cont_2`）可切换；密码验证成功后调用 `locker_on()` 开门
 - **Setting 页面密码门禁**：设置页默认先显示 4 位密码键盘，管理员密码当前硬编码为 `1234`，输入正确后才显示设置菜单。
-- **Save 页面**：显示引导文案 + 40 帧动画 + 静态进度条（固定 50）+ 静态标签（当前显示为 `2`），无实际录入逻辑。
+- **Save 页面**：完整的存件流程，显示引导文案，录入成功后显示柜号和密码
 - **调试链路**：板端 SoftAP（`ESP32_DEBUG_WIFI`），TCP(`8080`) 双向 HEX 透传。
 
 ### 进行中
-- **Setting 页面 XST 命令**：`READ`/`VERI`/`DELL` 按钮当前仅更新 `NOTE` 标签，未真正调用 `xst_cmd_get_user_count()` / `xst_cmd_verify()` / `xst_cmd_del_all()`。
-- **Take 页面取件流程**：
-  - 扫脉界面目前仅显示提示文案和静态图片，未触发 `xst_cmd_verify()`。
-  - 密码验证成功后仅有 UI 提示，未调用 `locker_on()` 开门。
-- **Save 页面存件流程**：仅有返回主菜单交互，无掌静脉录入、用户分配、柜门绑定逻辑。
-- **XST UI 集成**：识别/录入结果、模组状态（`READY`/`PALM_STATE`/`ERROR`）当前只写日志，未在页面上实时呈现。
+- **存件业务收尾**：当前已打通“主页进入存件页 → `ready_save_task` → XST 录入 → 生成密码 → 开柜”主链路，但仍缺少标准数据库入库、页面动态反馈和成功/失败提示音。
+- **存件数据库接入**：`ready_save_task()` 目前直接写 `lockers[i]` 结构体，尚未统一改为 `user_locker_entry_t + locker_db_add_entry()` 的正式入库流程。
+- **Save 页面动态反馈**：`save_page_label_1` / `save_page_label_2` / `save_page_bar_1` 仍是静态初始值，`save_verify_process` 队列已创建但还未实际用于 UI 进度同步。
+- **密码规范化**：`crumble_password()` 仍使用 `sizeof(password)` 和随机字节覆盖方式，尚未改为固定 4 位数字密码（0-9）。
+- **开机恢复持久化状态**：`main.c` 中 `locker_db_init()` 仍被注释，重启后无法从 NVS 恢复已存件的用户-柜号绑定关系。
+- **XST UI 集成**：识别/录入结果、模组状态（`READY`/`PALM_STATE`/`ERROR`）当前主要写日志，尚未统一映射到页面提示。
 - **Setting 页面 spangroup**：当前内容仍为 `hello`，未显示用户数或模组状态。
-- **数据持久化**：管理员密码、取件密码、用户-柜门绑定关系目前均为硬编码或仅驻留 RAM，未接入 NVS。
-- `xst_cmd_get_user_info()` 已声明但未实现（TODO）。
 
 ## 主要模块
 | 文件 | 说明 |
@@ -204,28 +216,29 @@ idf.py -p PORT flash monitor
 - 连接 AP 后，TCP 客户端连接 `8080` 可与 XST 串口做双向 HEX 透传
 
 ## 下一步计划
-- [ ] **实现 `xst_cmd_get_user_info()`**
-- [ ] **Setting 页面 XST 命令打通**：`READ` → `xst_cmd_get_user_count()`，`VERI` → `xst_cmd_verify()`，`DELL` → `xst_cmd_del_all()`
-- [ ] **Take 页面**：密码验证成功后调用 `locker_on()` 开门
-- [ ] **Take 页面**：扫脉模式接入 `xst_cmd_verify()`
-- [ ] **Save 页面**：整合 `xst_cmd_enroll_single()` 录入流程，分配柜号、绑定密码
-- [ ] **XST UI 集成**：识别结果/模组状态在屏幕上实时显示
-- [ ] **Setting 页面 spangroup**：填充为用户状态/模组状态显示
-- [ ] **NVS 持久化**：管理员密码、用户-柜门绑定关系、存取记录
+- [ ] **补齐存件正式入库链路**：在 `serve/serve.c::ready_save_task()` 中构造 `user_locker_entry_t`，填入 `user_id / locker_id / password / timestamp / is_valid`，并调用 `locker_db_add_entry()`。
+- [ ] **启用开机恢复**：在 `main/main.c` 中恢复调用 `locker_db_init()`，确保重启后柜号占用状态与 NVS 一致。
+- [ ] **修复密码生成**：将 `bsp/locker/locker.c::crumble_password()` 改为固定生成 4 位数字密码，并避免 `sizeof(password)` 指针退化问题。
+- [ ] **接通 Save 页面反馈**：用 `save_verify_process` 或直接回调方式，把“录入中 / 成功 / 失败 / 柜号 / 密码”同步到 `save_page_label_1`、`save_page_label_2`、`save_page_bar_1`。
+- [ ] **增加存件蜂鸣提示**：在存件成功和失败路径分别补充 `buzzer_beep_pattern()` 提示音。
+- [ ] **XST UI 集成**：识别结果/模组状态在屏幕上实时显示。
+- [ ] **Setting 页面 spangroup**：填充为用户状态/模组状态显示。
+- [ ] **NVS 持久化扩展**：管理员密码、取件密码、存取记录接入 NVS。
 - [ ] **OTA 升级支持**
 
 ## 已知问题 & 优化空间
-- `xst_cmd_get_user_info()` 已在头文件声明但未实现
-- Setting 页面 `READ`/`VERI`/`DELL` 按钮仅打印 NOTE，未调用 XST 命令
-- Take 页面密码"0000"硬编码，无 NVS 持久化
-- Setting 页面管理员密码 `1234` 硬编码，无 NVS 持久化
-- Take 页面扫脉模式当前没有接入真实识别流程
-- PALM_STATE / FACE_STATE / NID_UNKNOWNERROR 通知仅打印日志，未触发 UI 更新
-- Setting 页面 spangroup 当前内容为 "hello"
-- Save 页面进度条（`bar_1`）和标签（`label_2`）当前为静态值，无动态业务逻辑
-- `crumble_password()` 中 `sizeof(password)` 在实参传递时退化为指针大小（4字节），密码覆盖逻辑有 bug
-- 主页面 4 个柜门状态指示灯仅在启动时更新一次，后续开关门不会自动刷新 UI
-- TCP 链路在 WiFi 断开时无自动重连机制
+- `xst_cmd_get_user_info()` 已实现，但 README 之外的调用链尚未充分接入业务页。
+- Take 页面密码 `"0000"` 仍为硬编码，无 NVS 持久化。
+- Setting 页面管理员密码 `1234` 仍为硬编码，无 NVS 持久化。
+- Take 页面扫脉模式当前尚未完整接入“识别用户 → 查绑定柜号 → 开对应柜门”的正式闭环。
+- PALM_STATE / FACE_STATE / NID_UNKNOWNERROR 通知主要打印日志，尚未统一触发 UI 更新。
+- Setting 页面 spangroup 当前内容为 `hello`。
+- Save 页面进度条（`bar_1`）和标签（`label_2`）仍为静态值，暂无动态业务逻辑。
+- `ready_save_task()` 当前直接写 `lockers[i]` 结构体，尚未统一通过 `locker_db_add_entry()` 做正式入库。
+- `main.c` 中 `locker_db_init()` 仍未启用，重启后存件状态无法自动恢复。
+- `crumble_password()` 中 `sizeof(password)` 在实参传递时退化为指针大小，且当前生成的是随机字节而非 4 位数字密码。
+- 存件成功/失败路径尚未补齐蜂鸣提示。
+- TCP 链路在 WiFi 断开时无自动重连机制。
 
 ## 注意事项
 - `bsp/ui/generated/` 下文件理论上是 Gui Guider 生成区，但当前项目的页面事件和部分业务逻辑直接写在 `bsp/ui/generated/events_init.c` 中；如果后续用 Gui Guider 重新生成，需要先迁移或备份这些手写逻辑。

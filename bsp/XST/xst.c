@@ -58,6 +58,7 @@ static const char* xst_get_mid_str(uint8_t mid){
     case MID_VERIFY: return "VERIFY (验证/识别)";
     case MID_ENROLL: return "ENROLL (录入)";
     case MID_ENROLL_SINGLE: return "ENROLL_SINGLE (单次录入)";
+    case MID_ENROLL_PROGRESS : return "ENROLL_PROGRESS (录入进度)";
     case MID_DEL_USER: return "DEL_USER (删除用户)";
     case MID_DEL_ALL: return "DEL_ALL (清空用户)";
     case MID_GET_ALL_USER_ID: return "GET_ALL_USER_ID (获取总数)";
@@ -82,6 +83,9 @@ static const char* xst_get_result_str(uint8_t res){
     case MR_FAILED4_ENROLLED: return "用户已存在 (ENROLLED)";
     case MR_FAILED4_LIVENESS_CHECK: return "活体检测失败 (LIVENESS_CHECK)";
     case MR_FAILED4_TIME_OUT: return "超时 (TIME_OUT)";
+    case MR_FAILED4_AUTH_FAIL: return "授权失败 (AUTHORIZATION)";
+    case MR_FAILED4_READ_FILE: return "读文件失败 (READ_FILE)";
+    case MR_FAILED4_WRITE_FILE: return "写文件失败 (WRITE_FILE)";
     default: return "其他错误 (OTHER_ERROR)";
     }
 }
@@ -111,6 +115,28 @@ static uint8_t xst_calc_checksum(uint8_t msg_id, uint16_t size, uint8_t* data){
         }
     }
     return checksum;
+}
+
+static void xst_copy_user_name(char* dst, size_t dst_size, const uint8_t* src, size_t src_len){
+    if (dst == NULL || dst_size == 0){
+        return;
+    }
+
+    size_t copy_len = src_len;
+    if (copy_len >= dst_size){
+        copy_len = dst_size - 1;
+    }
+
+    if (src != NULL && copy_len > 0){
+        memcpy(dst, src, copy_len);
+    }
+    dst[copy_len] = '\0';
+
+    for (size_t i = 0; i < copy_len; ++i){
+        if ((unsigned char)dst[i] == '\0'){
+            break;
+        }
+    }
 }
 
 /*******************************************************************************
@@ -212,7 +238,7 @@ static void xst_dispatch_frame(uint8_t msg_id, uint16_t data_len, uint8_t* paylo
  ******************************************************************************/
 static void xst_parse_task(void* param){
     while (1){
-        // [功能3] 等待二值信号量被释放 (阻塞态，不耗CPU)
+        // 等待二值信号量被释放 (阻塞态，不耗CPU)
         if (xSemaphoreTake(xst_parse_sem, portMAX_DELAY) == pdTRUE){
             // 循环取出链表中所有的待解析帧
             while (1){
@@ -432,11 +458,26 @@ void xst_init(xst_note_callback_t callback){
 // 内部使用的事务处理封装
 static xst_result_t xst_exec_cmd(uint8_t cmd, uint8_t* tx_data, uint16_t tx_len,
                                  uint8_t** rx_payload, uint16_t* rx_len, uint32_t timeout){
+    if (rx_payload != NULL){
+        *rx_payload = NULL;
+    }
+    if (rx_len != NULL){
+        *rx_len = 0;
+    }
+
     xQueueReset(xst_reply_queue);
     xst_send_packet(cmd, tx_data, tx_len);
 
     queue_item_t item;
     if (xQueueReceive(xst_reply_queue, &item, pdMS_TO_TICKS(timeout)) == pdTRUE){
+        if (item.data == NULL || item.len < 2){
+            ESP_LOGW(XST_TAG, "=> [xst_exec_cmd] 收到非法回复包，长度=%u", item.len);
+            if (item.data != NULL){
+                free(item.data);
+            }
+            return MR_FAILED4_UNKNOWN_REASON;
+        }
+
         xst_reply_body_t* body = (xst_reply_body_t*)item.data;
         ESP_LOGI(XST_TAG, "=> [xst_exec_cmd] 收到回复, body->mid=0x%02X, 期望cmd=0x%02X", body->mid, cmd);
 
@@ -453,10 +494,14 @@ static xst_result_t xst_exec_cmd(uint8_t cmd, uint8_t* tx_data, uint16_t tx_len,
             *rx_len = item.len - 2;
             if (*rx_len > 0){
                 *rx_payload = malloc(*rx_len);
-                if (*rx_payload) memcpy(*rx_payload, body->payload, *rx_len);
-            }
-            else{
-                *rx_payload = NULL;
+                if (*rx_payload != NULL){
+                    memcpy(*rx_payload, body->payload, *rx_len);
+                }
+                else{
+                    ESP_LOGE(XST_TAG, "=> [xst_exec_cmd] 申请回复载荷缓存失败");
+                    free(item.data);
+                    return MR_FAILED4_NO_MEMORY;
+                }
             }
         }
         free(item.data);
@@ -506,7 +551,7 @@ xst_result_t xst_cmd_enroll_single(const char* name, uint8_t admin, uint8_t time
     memset(&param, 0, sizeof(param));
     param.admin = admin;
     param.timeout = timeout;
-    strncpy(param.user_name, name, 31);
+    strncpy(param.user_name, name, XST_USER_NAME_SIZE - 1);
 
     uint32_t wait_time = (timeout + 5) * 1000;
     uint8_t* data = NULL;
@@ -514,12 +559,24 @@ xst_result_t xst_cmd_enroll_single(const char* name, uint8_t admin, uint8_t time
 
     xst_result_t res = xst_exec_cmd(MID_ENROLL_SINGLE, (uint8_t*)&param, sizeof(param), &data, &len, wait_time);
 
-    if (res == MR_SUCCESS && data != NULL && len >= 2){
-        if (out_user_id) *out_user_id = (uint16_t)data[0] << 8 | data[1];
+    if (res == MR_SUCCESS && data != NULL && len >= sizeof(xst_enroll_reply_t)){
+        uint16_t user_id = (uint16_t)(((uint16_t)data[0] << 8) | data[1]);
+        uint8_t direction = data[2];
+        if (out_user_id != NULL){
+            *out_user_id = user_id;
+        }
+        ESP_LOGI(XST_TAG, "Enroll success: user_id=%u direction=%u",
+                 (unsigned int)user_id,
+                 (unsigned int)direction);
     }
     if (data) free(data);
     return res;
 }
+
+
+// xst_result_t xst_cmd_enroll_single_id16(){
+//
+// }
 
 /** 验证用户
  *
@@ -536,14 +593,54 @@ xst_result_t xst_cmd_verify(uint8_t timeout, uint16_t* out_user_id, char* out_na
 
     xst_result_t res = xst_exec_cmd(MID_VERIFY, req, 2, &data, &len, wait_time);
 
-    if (res == MR_SUCCESS && data != NULL && len >= 34){
-        if (out_user_id) *out_user_id = (uint16_t)data[0] << 8 | data[1];
-        if (out_name){
-            memcpy(out_name, &data[2], 32);
-            out_name[31] = '\0';
+    if (res == MR_SUCCESS && data != NULL && len >= sizeof(xst_verify_reply_t)){
+        uint16_t user_id = (uint16_t)(((uint16_t)data[0] << 8) | data[1]);
+        uint8_t admin = data[2 + XST_USER_NAME_SIZE];
+        uint8_t unlock_status = data[2 + XST_USER_NAME_SIZE + 1];
+
+        if (out_user_id != NULL){
+            *out_user_id = user_id;
         }
+        if (out_name != NULL){
+            xst_copy_user_name(out_name, XST_USER_NAME_SIZE, &data[2], XST_USER_NAME_SIZE);
+        }
+        ESP_LOGI(XST_TAG, "Verify success: user_id=%u admin=%u unlock_status=%u",
+                 (unsigned int)user_id,
+                 (unsigned int)admin,
+                 (unsigned int)unlock_status);
     }
     if (data) free(data);
+    return res;
+}
+
+/** 获取指定用户信息
+ *
+ * 协议依据：6.18 MID_GET_USER_INFO
+ * 请求载荷：user_id 高8位 + 低8位
+ * 响应载荷：user_id(2) + user_name(32) + admin(1)
+ */
+xst_result_t xst_cmd_get_user_info(uint16_t query_id, xst_user_info_t* out_info){
+    uint8_t req[2] = {(uint8_t)(query_id >> 8), (uint8_t)(query_id & 0xFF)};
+    uint8_t* data = NULL;
+    uint16_t len = 0;
+
+    xst_result_t res = xst_exec_cmd(MID_GET_USER_INFO, req, 2, &data, &len, 2000);
+    if (res == MR_SUCCESS && data != NULL && len >= sizeof(xst_user_info_t) && out_info != NULL){
+        memset(out_info, 0, sizeof(*out_info));
+        out_info->id = (uint16_t)(((uint16_t)data[0] << 8) | data[1]);
+        memcpy(out_info->name, &data[2], XST_USER_NAME_SIZE);
+        out_info->name[XST_USER_NAME_SIZE - 1] = '\0';
+        out_info->admin = data[2 + XST_USER_NAME_SIZE];
+
+        ESP_LOGI(XST_TAG, "Get user info success: user_id=%u name=%s admin=%u",
+                 (unsigned int)out_info->id,
+                 out_info->name,
+                 (unsigned int)out_info->admin);
+    }
+
+    if (data != NULL){
+        free(data);
+    }
     return res;
 }
 
@@ -575,8 +672,9 @@ xst_result_t xst_cmd_get_user_count(uint16_t* count){
     uint16_t len = 0;
     xst_result_t res = xst_exec_cmd(MID_GET_ALL_USER_ID, NULL, 0, &data, &len, 2000);
 
-    if (res == MR_SUCCESS && data != NULL && len >= 2){
-        *count = (uint16_t)data[0] << 8 | data[1];
+    if (res == MR_SUCCESS && data != NULL && len >= 1 && count != NULL){
+        *count = data[0];
+        ESP_LOGI(XST_TAG, "Get user count success: count=%u", (unsigned int)*count);
     }
     if (data) free(data);
     return res;

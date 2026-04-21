@@ -10,6 +10,7 @@ cmake_minimum_required(VERSION 3.16)
 set(EXTRA_COMPONENT_DIRS bsp
                         bsp/ui/custom
                         bsp/ui/generated
+                        serve
                         )
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 

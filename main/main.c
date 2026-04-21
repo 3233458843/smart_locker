@@ -1,5 +1,6 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 #include "nvs_flash.h"
 #include "freertos/timers.h"
 #include "esp_system.h"
@@ -26,6 +27,9 @@
 #include "../bsp/lvgl_port/lv_port_disp.h"
 #include "../bsp/lvgl_port/lv_port_indev.h"
 
+#include "serve.h"
+
+#undef TAG
 #define TAG "MAIN"
 #define TCP_PORT 8080
 // ------------------------------------------------------------------------------------
@@ -188,6 +192,34 @@ void tcp_server_task(void* pvParameters){
 void main_serve(void *arg){
     (void)arg;
     while (1){
+        // 实时更新主页柜子状态显示
+        if (lockers[0].is_locked == true){
+            lv_obj_set_style_bg_color(guider_ui.main_locker1, lv_color_hex(0xFF0000), 0);
+        }
+        else{
+            lv_obj_set_style_bg_color(guider_ui.main_locker1, lv_color_hex(0x00FF00), 0);
+        }
+
+        if (lockers[1].is_locked == true){
+            lv_obj_set_style_bg_color(guider_ui.main_locker2, lv_color_hex(0xFF0000), 0);
+        }
+        else{
+            lv_obj_set_style_bg_color(guider_ui.main_locker2, lv_color_hex(0x00FF00), 0);
+        }
+
+        if (lockers[2].is_locked == true){
+            lv_obj_set_style_bg_color(guider_ui.main_locker3, lv_color_hex(0xFF0000), 0);
+        }
+        else{
+            lv_obj_set_style_bg_color(guider_ui.main_locker3, lv_color_hex(0x00FF00), 0);
+        }
+
+        if (lockers[3].is_locked == true){
+            lv_obj_set_style_bg_color(guider_ui.main_locker4, lv_color_hex(0xFF0000), 0);
+        }
+        else{
+            lv_obj_set_style_bg_color(guider_ui.main_locker4, lv_color_hex(0x00FF00), 0);
+        }
 
         vTaskDelay(pdMS_TO_TICKS(1000)); // 每秒检查一次
     }
@@ -201,6 +233,10 @@ void app_main(void){
         ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
+
+    //----------------------------------------------------------------------------------------------------------
+    serve_init();
+    //---------------------------------------------------------------------------------------------------------
     /* 初始化 LVGL Tick 定时器 */
     lvgl_tick_timer_init();
     lv_init(); // 初始化 LVGL 库
@@ -210,6 +246,8 @@ void app_main(void){
     lv_port_indev_init();
 
     locker_init();
+    // 初始化 locker 数据库（从 NVS 恢复数据）
+    // locker_db_init();
     // 检查柜门状态
     for (uint8_t i = 0; i < 4; i++){
         if (Detection_locker_on_off(&lockers[i])){
@@ -243,8 +281,6 @@ void app_main(void){
     ESP_ERROR_CHECK(buzzer_init());
 
     buzzer_handle_t buzzer_handle = buzzer_get_handle(0);
-
-
 
     if (buzzer_handle != NULL){
         ESP_LOGI(TAG, "Buzzer device initialized successfully");

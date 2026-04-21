@@ -1,0 +1,15 @@
+最低成本用法
+
+开头：
+/skill context-handoff-summary
+默认先读 .context/current.md，再参考最近 1~3 条 history。
+
+结尾：
+收尾并更新上下文
+
+默认行为：
+- 先读 current.md
+- 再看最近 history
+- 只保存 6 行最小上下文
+- 默认只回复：已更新上下文
+- 仅在你明确要求时才回显完整摘要

@@ -6,23 +6,23 @@
 * comply with and are bound by, such license terms.  If you do not agree to be bound by the applicable license
 * terms, then you may not retain, install, activate or otherwise use the software.
 */
-
 #include "events_init.h"
+
+#include <esp_log.h>
 #include <stdio.h>
 #include "lvgl.h"
-#include "XST/xst.h"
-#include "locker/locker.h"
-#include "buzzer/buzzer.h"
-#include "esp_log.h"
 
 #if LV_USE_GUIDER_SIMULATOR && LV_USE_FREEMASTER
 #include "freemaster_client.h"
 #endif
 
 #include <string.h>
-#include <stdio.h>
 
-#define TAG "EVENTS_INIT"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "XST/xst.h"
+#include "locker/locker.h"
+#include "serve.h"
 
 // 静态变量保存当前取件输入的密码
 static char take_input_pwd[5] = "";
@@ -31,7 +31,7 @@ static uint8_t take_pwd_len = 0;
 // 这里设置用户的取件密码，测试先写死为 "0000"
 #ifndef TAKE_PWD_DEF
 #define TAKE_PWD_DEF
-const char* take_correct_pwd = "0000";
+const char * take_correct_pwd = "0000";
 #endif
 #include <string.h>
 #include <stdio.h>
@@ -43,13 +43,15 @@ static uint8_t setting_pwd_len = 0;
 // 这里设置你的管理员密码 (1234)
 #ifndef ADMIN_PWD_DEF
 #define ADMIN_PWD_DEF
-const char* admin_pwd = "1234";
+const char * admin_pwd = "1234";
 #endif
 
-static void main_event_handler(lv_event_t* e){
+static void main_event_handler (lv_event_t *e)
+{
     lv_event_code_t code = lv_event_get_code(e);
-    switch (code){
-    case LV_EVENT_SCREEN_LOADED: {
+    switch (code) {
+    case LV_EVENT_SCREEN_LOADED:
+    {
         lv_animimg_start(guider_ui.main_animimg_1);
         break;
     }
@@ -58,14 +60,19 @@ static void main_event_handler(lv_event_t* e){
     }
 }
 
-static void main_btn_1_event_handler(lv_event_t* e){
+static void main_btn_1_event_handler (lv_event_t *e)
+{
     lv_event_code_t code = lv_event_get_code(e);
-    switch (code){
-    case LV_EVENT_CLICKED: {
-        ui_load_scr_animation(&guider_ui, &guider_ui.save_page, guider_ui.save_page_del, &guider_ui.main_del,
-                              setup_scr_save_page, LV_SCR_LOAD_ANIM_NONE, 100, 100, true, true);
-        // 检测到用户按下取件按钮，进入取件页面
-        // xst_cmd_enroll_single();
+    switch (code) {
+    case LV_EVENT_CLICKED:
+    {
+        ui_load_scr_animation(&guider_ui, &guider_ui.save_page, guider_ui.save_page_del, &guider_ui.main_del, setup_scr_save_page, LV_SCR_LOAD_ANIM_NONE, 100, 100, true, true);
+
+        // 发送存件信号量
+        if (ready_save != NULL){
+            xSemaphoreGive(ready_save);
+            ESP_LOGI( "EVENT", "Sent ready_save signal");
+        }
         break;
     }
     default:
@@ -73,12 +80,18 @@ static void main_btn_1_event_handler(lv_event_t* e){
     }
 }
 
-static void main_btn_2_event_handler(lv_event_t* e){
+static void main_btn_2_event_handler (lv_event_t *e)
+{
     lv_event_code_t code = lv_event_get_code(e);
-    switch (code){
-    case LV_EVENT_CLICKED: {
-        ui_load_scr_animation(&guider_ui, &guider_ui.take_page, guider_ui.take_page_del, &guider_ui.main_del,
-                              setup_scr_take_page, LV_SCR_LOAD_ANIM_NONE, 100, 100, true, true);
+    switch (code) {
+    case LV_EVENT_CLICKED:
+    {
+        ui_load_scr_animation(&guider_ui, &guider_ui.take_page, guider_ui.take_page_del, &guider_ui.main_del, setup_scr_take_page, LV_SCR_LOAD_ANIM_NONE, 100, 100, true, true);
+        // 发送取件信号量
+        if (ready_take != NULL){
+            xSemaphoreGive(ready_take);
+            ESP_LOGI("EVENT", "Sent ready_take signal");
+        }
         break;
     }
     default:
@@ -86,17 +99,18 @@ static void main_btn_2_event_handler(lv_event_t* e){
     }
 }
 
-static void main_btn_3_event_handler(lv_event_t* e){
+static void main_btn_3_event_handler (lv_event_t *e)
+{
     lv_event_code_t code = lv_event_get_code(e);
-    switch (code){
-    case LV_EVENT_CLICKED: {
-        ui_load_scr_animation(&guider_ui, &guider_ui.help_page, guider_ui.help_page_del, &guider_ui.main_del,
-                              setup_scr_help_page, LV_SCR_LOAD_ANIM_NONE, 50, 50, true, true);
+    switch (code) {
+    case LV_EVENT_CLICKED:
+    {
+        ui_load_scr_animation(&guider_ui, &guider_ui.help_page, guider_ui.help_page_del, &guider_ui.main_del, setup_scr_help_page, LV_SCR_LOAD_ANIM_NONE, 50, 50, true, true);
         break;
     }
-    case LV_EVENT_LONG_PRESSED: {
-        ui_load_scr_animation(&guider_ui, &guider_ui.setting_page, guider_ui.setting_page_del, &guider_ui.main_del,
-                              setup_scr_setting_page, LV_SCR_LOAD_ANIM_NONE, 50, 50, true, true);
+    case LV_EVENT_LONG_PRESSED:
+    {
+        ui_load_scr_animation(&guider_ui, &guider_ui.setting_page, guider_ui.setting_page_del, &guider_ui.main_del, setup_scr_setting_page, LV_SCR_LOAD_ANIM_NONE, 50, 50, true, true);
         break;
     }
     default:
@@ -104,18 +118,21 @@ static void main_btn_3_event_handler(lv_event_t* e){
     }
 }
 
-void events_init_main(lv_ui* ui){
+void events_init_main (lv_ui *ui)
+{
     lv_obj_add_event_cb(ui->main, main_event_handler, LV_EVENT_ALL, ui);
     lv_obj_add_event_cb(ui->main_btn_1, main_btn_1_event_handler, LV_EVENT_ALL, ui);
     lv_obj_add_event_cb(ui->main_btn_2, main_btn_2_event_handler, LV_EVENT_ALL, ui);
     lv_obj_add_event_cb(ui->main_btn_3, main_btn_3_event_handler, LV_EVENT_ALL, ui);
 }
 
-static void take_page_event_handler(lv_event_t* e){
+static void take_page_event_handler (lv_event_t *e)
+{
     lv_event_code_t code = lv_event_get_code(e);
-    switch (code){
-    case LV_EVENT_SCREEN_LOADED: {
-        lv_ui* ui = &guider_ui;
+    switch (code) {
+    case LV_EVENT_SCREEN_LOADED:
+    {
+        lv_ui * ui = &guider_ui;
 
         // 1. 确保刚进页面时，显示扫脉界面 (cont_1)，隐藏密码界面 (cont_2)
         lv_obj_clear_flag(ui->take_page_cont_1, LV_OBJ_FLAG_HIDDEN);
@@ -136,12 +153,13 @@ static void take_page_event_handler(lv_event_t* e){
     }
 }
 
-static void take_page_imgbtn_1_event_handler(lv_event_t* e){
+static void take_page_imgbtn_1_event_handler (lv_event_t *e)
+{
     lv_event_code_t code = lv_event_get_code(e);
-    switch (code){
-    case LV_EVENT_CLICKED: {
-        ui_load_scr_animation(&guider_ui, &guider_ui.main, guider_ui.main_del, &guider_ui.take_page_del, setup_scr_main,
-                              LV_SCR_LOAD_ANIM_NONE, 200, 200, false, true);
+    switch (code) {
+    case LV_EVENT_CLICKED:
+    {
+        ui_load_scr_animation(&guider_ui, &guider_ui.main, guider_ui.main_del, &guider_ui.take_page_del, setup_scr_main, LV_SCR_LOAD_ANIM_NONE, 200, 200, false, true);
         break;
     }
     default:
@@ -149,10 +167,12 @@ static void take_page_imgbtn_1_event_handler(lv_event_t* e){
     }
 }
 
-static void take_page_btn_1_event_handler(lv_event_t* e){
+static void take_page_btn_1_event_handler (lv_event_t *e)
+{
     lv_event_code_t code = lv_event_get_code(e);
-    switch (code){
-    case LV_EVENT_CLICKED: {
+    switch (code) {
+    case LV_EVENT_CLICKED:
+    {
         lv_obj_remove_flag(guider_ui.take_page_cont_2, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(guider_ui.take_page_cont_1, LV_OBJ_FLAG_HIDDEN);
         break;
@@ -162,10 +182,12 @@ static void take_page_btn_1_event_handler(lv_event_t* e){
     }
 }
 
-static void take_page_imgbtn_2_event_handler(lv_event_t* e){
+static void take_page_imgbtn_2_event_handler (lv_event_t *e)
+{
     lv_event_code_t code = lv_event_get_code(e);
-    switch (code){
-    case LV_EVENT_CLICKED: {
+    switch (code) {
+    case LV_EVENT_CLICKED:
+    {
         lv_obj_add_flag(guider_ui.take_page_cont_2, LV_OBJ_FLAG_HIDDEN);
         lv_obj_remove_flag(guider_ui.take_page_cont_1, LV_OBJ_FLAG_HIDDEN);
         break;
@@ -175,81 +197,60 @@ static void take_page_imgbtn_2_event_handler(lv_event_t* e){
     }
 }
 
-static void take_page_btnm_1_event_handler(lv_event_t* e){
+static void take_page_btnm_1_event_handler (lv_event_t *e)
+{
     lv_event_code_t code = lv_event_get_code(e);
-    switch (code){
-    case LV_EVENT_VALUE_CHANGED: {
-        lv_obj_t* obj = lv_event_get_target(e);
+    switch (code) {
+    case LV_EVENT_VALUE_CHANGED:
+    {
+        lv_obj_t * obj = lv_event_get_target(e);
         uint32_t id = lv_buttonmatrix_get_selected_button(obj);
-        lv_ui* ui = &guider_ui;
+        lv_ui * ui = &guider_ui;
 
         // 1. 获取当前点击的按键文本
-        lv_obj_t* my_btnm = lv_event_get_target(e);
+        lv_obj_t * my_btnm = lv_event_get_target(e);
         uint32_t my_id = lv_buttonmatrix_get_selected_button(my_btnm);
-        const char* my_txt = lv_buttonmatrix_get_button_text(my_btnm, my_id);
+        const char * my_txt = lv_buttonmatrix_get_button_text(my_btnm, my_id);
 
-        if (my_txt == NULL) return;
+        if(my_txt == NULL) return;
 
         // 2. 核心逻辑判断
-        if (strcmp(my_txt, "X") == 0 || strcmp(my_txt, "x") == 0){
+        if(strcmp(my_txt, "X") == 0 || strcmp(my_txt, "x") == 0) {
             // 【退格键】
-            if (take_pwd_len > 0){
+            if(take_pwd_len > 0) {
                 take_pwd_len--;
                 take_input_pwd[take_pwd_len] = '\0';
             }
             // 恢复上方提示语
             lv_label_set_text(ui->take_page_label_2, "请输入密码");
         }
-         else if (strcmp(my_txt, "V") == 0 || strcmp(my_txt, "v") == 0){
-             // 【确认键】
-             if (take_pwd_len == 4){
-                 if (strcmp(take_input_pwd, take_correct_pwd) == 0){
-                     // ✅ 密码正确，执行开柜！
-                     printf("Take Password Correct!\n");
-                     lv_label_set_text(ui->take_page_label_2, "密码正确，开柜中...");
+        else if(strcmp(my_txt, "V") == 0 || strcmp(my_txt, "v") == 0) {
+            // 【确认键】
+            if(take_pwd_len == 4) {
+                if(strcmp(take_input_pwd, take_correct_pwd) == 0) {
 
-                     // 查找对应的柜号（密码匹配）
-                     locker_t* target_locker = NULL;
-                     for (uint8_t i = 0; i < 4; i++){
-                         if (memcmp(lockers[i].password, (uint8_t*)take_input_pwd, 4) == 0){
-                             target_locker = &lockers[i];
-                             break;
-                         }
-                     }
+                    // ✅ 密码正确，执行开柜！
+                    printf("Take Password Correct!\n");
+                    lv_label_set_text(ui->take_page_label_2, "密码正确！柜门已开");
 
-                     if (target_locker != NULL){
-                         // 打开柜门
-                         locker_on(target_locker);
-                         ESP_LOGI(TAG, "Locker %d opened successfully", target_locker->locker_id + 1);
+                    // TODO: 未来在这里调用开柜函数，或者弹出一个“取件成功”的提示框
 
-                         // 蜂鸣反馈
-                         buzzer_handle_t buzzer = buzzer_get_handle(0);
-                         if (buzzer != NULL){
-                             buzzer_beep_pattern(buzzer, BUZZER_BEEP_SUCCESS);
-                         }
+                } else {
+                    // ❌ 密码错误
+                    lv_label_set_text(ui->take_page_label_2, "密码错误，请重试！");
+                }
 
-                         lv_label_set_text(ui->take_page_label_2, "取件成功！");
-                     }
-                     else{
-                         lv_label_set_text(ui->take_page_label_2, "柜号错误！");
-                     }
-                 }
-                 else{
-                     // ❌ 密码错误
-                     lv_label_set_text(ui->take_page_label_2, "密码错误！");
-                 }
+                // 验证完后自动清空密码盘
+                take_pwd_len = 0;
+                memset(take_input_pwd, 0, sizeof(take_input_pwd));
 
-                 // 验证完后自动清空密码盘
-                 take_pwd_len = 0;
-                 memset(take_input_pwd, 0, sizeof(take_input_pwd));
-             }
-            else{
-                lv_label_set_text(ui->take_page_label_2, "请输入4位密码！");
+            } else {
+                lv_label_set_text(ui->take_page_label_2, "必须输入4位密码！");
             }
         }
-        else{
+        else {
             // 【数字键】
-            if (take_pwd_len < 4){
+            if(take_pwd_len < 4) {
                 take_input_pwd[take_pwd_len] = my_txt[0];
                 take_pwd_len++;
                 take_input_pwd[take_pwd_len] = '\0';
@@ -261,38 +262,38 @@ static void take_page_btnm_1_event_handler(lv_event_t* e){
         char char_str[2] = {0, 0};
 
         // 第一位
-        if (take_pwd_len > 0){
+        if(take_pwd_len > 0) {
             char_str[0] = take_input_pwd[0];
             lv_label_set_text(ui->take_page_label_3, char_str);
         }
-        else{
+        else {
             lv_label_set_text(ui->take_page_label_3, "_");
         }
 
         // 第二位
-        if (take_pwd_len > 1){
+        if(take_pwd_len > 1) {
             char_str[0] = take_input_pwd[1];
             lv_label_set_text(ui->take_page_label_4, char_str);
         }
-        else{
+        else {
             lv_label_set_text(ui->take_page_label_4, "_");
         }
 
         // 第三位
-        if (take_pwd_len > 2){
+        if(take_pwd_len > 2) {
             char_str[0] = take_input_pwd[2];
             lv_label_set_text(ui->take_page_label_5, char_str);
         }
-        else{
+        else {
             lv_label_set_text(ui->take_page_label_5, "_");
         }
 
         // 第四位
-        if (take_pwd_len > 3){
+        if(take_pwd_len > 3) {
             char_str[0] = take_input_pwd[3];
             lv_label_set_text(ui->take_page_label_6, char_str);
         }
-        else{
+        else {
             lv_label_set_text(ui->take_page_label_6, "_");
         }
         break;
@@ -302,7 +303,8 @@ static void take_page_btnm_1_event_handler(lv_event_t* e){
     }
 }
 
-void events_init_take_page(lv_ui* ui){
+void events_init_take_page (lv_ui *ui)
+{
     lv_obj_add_event_cb(ui->take_page, take_page_event_handler, LV_EVENT_ALL, ui);
     lv_obj_add_event_cb(ui->take_page_imgbtn_1, take_page_imgbtn_1_event_handler, LV_EVENT_ALL, ui);
     lv_obj_add_event_cb(ui->take_page_btn_1, take_page_btn_1_event_handler, LV_EVENT_ALL, ui);
@@ -310,10 +312,13 @@ void events_init_take_page(lv_ui* ui){
     lv_obj_add_event_cb(ui->take_page_btnm_1, take_page_btnm_1_event_handler, LV_EVENT_ALL, ui);
 }
 
-static void save_page_event_handler(lv_event_t* e){
+static void save_page_event_handler (lv_event_t *e)
+{
     lv_event_code_t code = lv_event_get_code(e);
-    switch (code){
-    case LV_EVENT_SCREEN_LOADED: {
+    switch (code) {
+    case LV_EVENT_SCREEN_LOADED:
+    {
+
         break;
     }
     default:
@@ -321,12 +326,13 @@ static void save_page_event_handler(lv_event_t* e){
     }
 }
 
-static void save_page_imgbtn_1_event_handler(lv_event_t* e){
+static void save_page_imgbtn_1_event_handler (lv_event_t *e)
+{
     lv_event_code_t code = lv_event_get_code(e);
-    switch (code){
-    case LV_EVENT_CLICKED: {
-        ui_load_scr_animation(&guider_ui, &guider_ui.main, guider_ui.main_del, &guider_ui.save_page_del, setup_scr_main,
-                              LV_SCR_LOAD_ANIM_NONE, 200, 200, true, true);
+    switch (code) {
+    case LV_EVENT_CLICKED:
+    {
+        ui_load_scr_animation(&guider_ui, &guider_ui.main, guider_ui.main_del, &guider_ui.save_page_del, setup_scr_main, LV_SCR_LOAD_ANIM_NONE, 200, 200, true, true);
         break;
     }
     default:
@@ -334,17 +340,19 @@ static void save_page_imgbtn_1_event_handler(lv_event_t* e){
     }
 }
 
-void events_init_save_page(lv_ui* ui){
+void events_init_save_page (lv_ui *ui)
+{
     lv_obj_add_event_cb(ui->save_page, save_page_event_handler, LV_EVENT_ALL, ui);
     lv_obj_add_event_cb(ui->save_page_imgbtn_1, save_page_imgbtn_1_event_handler, LV_EVENT_ALL, ui);
 }
 
-static void help_page_event_handler(lv_event_t* e){
+static void help_page_event_handler (lv_event_t *e)
+{
     lv_event_code_t code = lv_event_get_code(e);
-    switch (code){
-    case LV_EVENT_CLICKED: {
-        ui_load_scr_animation(&guider_ui, &guider_ui.main, guider_ui.main_del, &guider_ui.help_page_del, setup_scr_main,
-                              LV_SCR_LOAD_ANIM_NONE, 100, 100, true, true);
+    switch (code) {
+    case LV_EVENT_CLICKED:
+    {
+        ui_load_scr_animation(&guider_ui, &guider_ui.main, guider_ui.main_del, &guider_ui.help_page_del, setup_scr_main, LV_SCR_LOAD_ANIM_NONE, 100, 100, true, true);
         break;
     }
     default:
@@ -352,12 +360,13 @@ static void help_page_event_handler(lv_event_t* e){
     }
 }
 
-static void help_page_imgbtn_1_event_handler(lv_event_t* e){
+static void help_page_imgbtn_1_event_handler (lv_event_t *e)
+{
     lv_event_code_t code = lv_event_get_code(e);
-    switch (code){
-    case LV_EVENT_CLICKED: {
-        ui_load_scr_animation(&guider_ui, &guider_ui.main, guider_ui.main_del, &guider_ui.help_page_del, setup_scr_main,
-                              LV_SCR_LOAD_ANIM_NONE, 100, 100, true, true);
+    switch (code) {
+    case LV_EVENT_CLICKED:
+    {
+        ui_load_scr_animation(&guider_ui, &guider_ui.main, guider_ui.main_del, &guider_ui.help_page_del, setup_scr_main, LV_SCR_LOAD_ANIM_NONE, 100, 100, true, true);
         break;
     }
     default:
@@ -365,16 +374,19 @@ static void help_page_imgbtn_1_event_handler(lv_event_t* e){
     }
 }
 
-void events_init_help_page(lv_ui* ui){
+void events_init_help_page (lv_ui *ui)
+{
     lv_obj_add_event_cb(ui->help_page, help_page_event_handler, LV_EVENT_ALL, ui);
     lv_obj_add_event_cb(ui->help_page_imgbtn_1, help_page_imgbtn_1_event_handler, LV_EVENT_ALL, ui);
 }
 
-static void setting_page_event_handler(lv_event_t* e){
+static void setting_page_event_handler (lv_event_t *e)
+{
     lv_event_code_t code = lv_event_get_code(e);
-    switch (code){
-    case LV_EVENT_SCREEN_LOADED: {
-        lv_ui* ui = &guider_ui;
+    switch (code) {
+    case LV_EVENT_SCREEN_LOADED:
+    {
+        lv_ui * ui = &guider_ui;
 
         // 1. 强制显示密码框 (cont_2)，隐藏真实设置菜单 (cont_1)
         lv_obj_clear_flag(ui->setting_page_cont_2, LV_OBJ_FLAG_HIDDEN);
@@ -395,12 +407,13 @@ static void setting_page_event_handler(lv_event_t* e){
     }
 }
 
-static void setting_page_imgbtn_1_event_handler(lv_event_t* e){
+static void setting_page_imgbtn_1_event_handler (lv_event_t *e)
+{
     lv_event_code_t code = lv_event_get_code(e);
-    switch (code){
-    case LV_EVENT_CLICKED: {
-        ui_load_scr_animation(&guider_ui, &guider_ui.main, guider_ui.main_del, &guider_ui.setting_page_del,
-                              setup_scr_main, LV_SCR_LOAD_ANIM_NONE, 100, 100, true, true);
+    switch (code) {
+    case LV_EVENT_CLICKED:
+    {
+        ui_load_scr_animation(&guider_ui, &guider_ui.main, guider_ui.main_del, &guider_ui.setting_page_del, setup_scr_main, LV_SCR_LOAD_ANIM_NONE, 100, 100, true, true);
         break;
     }
     default:
@@ -408,12 +421,14 @@ static void setting_page_imgbtn_1_event_handler(lv_event_t* e){
     }
 }
 
-static void setting_page_RES_event_handler(lv_event_t* e){
+static void setting_page_RES_event_handler (lv_event_t *e)
+{
     lv_event_code_t code = lv_event_get_code(e);
-    switch (code){
-    case LV_EVENT_CLICKED: {
-        xst_cmd_reset();
+    switch (code) {
+    case LV_EVENT_CLICKED:
+    {
         lv_label_set_text(guider_ui.setting_page_NOTE, "模组复位");
+        xst_cmd_reset();
         break;
     }
     default:
@@ -421,11 +436,14 @@ static void setting_page_RES_event_handler(lv_event_t* e){
     }
 }
 
-static void setting_page_READ_event_handler(lv_event_t* e){
+static void setting_page_READ_event_handler (lv_event_t *e)
+{
     lv_event_code_t code = lv_event_get_code(e);
-    switch (code){
-    case LV_EVENT_CLICKED: {
+    switch (code) {
+    case LV_EVENT_CLICKED:
+    {
         lv_label_set_text(guider_ui.setting_page_NOTE, "模组读取用户");
+        xst_cmd_get_user_count(user_num);
         break;
     }
     default:
@@ -433,11 +451,14 @@ static void setting_page_READ_event_handler(lv_event_t* e){
     }
 }
 
-static void setting_page_DELL_event_handler(lv_event_t* e){
+static void setting_page_DELL_event_handler (lv_event_t *e)
+{
     lv_event_code_t code = lv_event_get_code(e);
-    switch (code){
-    case LV_EVENT_CLICKED: {
+    switch (code) {
+    case LV_EVENT_CLICKED:
+    {
         lv_label_set_text(guider_ui.setting_page_NOTE, "模组删除所有用户");
+        xst_cmd_del_all();
         break;
     }
     default:
@@ -445,12 +466,14 @@ static void setting_page_DELL_event_handler(lv_event_t* e){
     }
 }
 
-static void setting_page_locker4_event_handler(lv_event_t* e){
+static void setting_page_locker4_event_handler (lv_event_t *e)
+{
     lv_event_code_t code = lv_event_get_code(e);
-    switch (code){
-    case LV_EVENT_CLICKED: {
-        locker_on(&lockers[3]);
+    switch (code) {
+    case LV_EVENT_CLICKED:
+    {
         lv_label_set_text(guider_ui.setting_page_NOTE, "4号柜打开");
+        locker_on(&lockers[3]);
         break;
     }
     default:
@@ -458,12 +481,14 @@ static void setting_page_locker4_event_handler(lv_event_t* e){
     }
 }
 
-static void setting_page_locker3_event_handler(lv_event_t* e){
+static void setting_page_locker3_event_handler (lv_event_t *e)
+{
     lv_event_code_t code = lv_event_get_code(e);
-    switch (code){
-    case LV_EVENT_CLICKED: {
-        locker_on(&lockers[2]);
+    switch (code) {
+    case LV_EVENT_CLICKED:
+    {
         lv_label_set_text(guider_ui.setting_page_NOTE, "3号柜打开");
+        locker_on(&lockers[2]);
         break;
     }
     default:
@@ -471,11 +496,15 @@ static void setting_page_locker3_event_handler(lv_event_t* e){
     }
 }
 
-static void setting_page_VERI_event_handler(lv_event_t* e){
+static void setting_page_VERI_event_handler (lv_event_t *e)
+{
     lv_event_code_t code = lv_event_get_code(e);
-    switch (code){
-    case LV_EVENT_CLICKED: {
+    switch (code) {
+    case LV_EVENT_CLICKED:
+    {
         lv_label_set_text(guider_ui.setting_page_NOTE, "模组开始识别");
+        xSemaphoreGive(verify_debug);
+        ESP_LOGI ("EVENT", "已发送识别测试信号量");
         break;
     }
     default:
@@ -483,12 +512,14 @@ static void setting_page_VERI_event_handler(lv_event_t* e){
     }
 }
 
-static void setting_page_locker1_event_handler(lv_event_t* e){
+static void setting_page_locker1_event_handler (lv_event_t *e)
+{
     lv_event_code_t code = lv_event_get_code(e);
-    switch (code){
-    case LV_EVENT_CLICKED: {
-        locker_on(&lockers[0]);
+    switch (code) {
+    case LV_EVENT_CLICKED:
+    {
         lv_label_set_text(guider_ui.setting_page_NOTE, "1号柜打开");
+        locker_on(&lockers[0]);
         break;
     }
     default:
@@ -496,12 +527,14 @@ static void setting_page_locker1_event_handler(lv_event_t* e){
     }
 }
 
-static void setting_page_locker2_event_handler(lv_event_t* e){
+static void setting_page_locker2_event_handler (lv_event_t *e)
+{
     lv_event_code_t code = lv_event_get_code(e);
-    switch (code){
-    case LV_EVENT_CLICKED: {
-        locker_on(&lockers[1]);
+    switch (code) {
+    case LV_EVENT_CLICKED:
+    {
         lv_label_set_text(guider_ui.setting_page_NOTE, "2号柜打开");
+        locker_on(&lockers[1]);
         break;
     }
     default:
@@ -509,12 +542,14 @@ static void setting_page_locker2_event_handler(lv_event_t* e){
     }
 }
 
-static void setting_page_ALL_event_handler(lv_event_t* e){
+static void setting_page_ALL_event_handler (lv_event_t *e)
+{
     lv_event_code_t code = lv_event_get_code(e);
-    switch (code){
-    case LV_EVENT_CLICKED: {
-        locker_all_on();
+    switch (code) {
+    case LV_EVENT_CLICKED:
+    {
         lv_label_set_text(guider_ui.setting_page_NOTE, "所有柜打开");
+        locker_all_on();
         break;
     }
     default:
@@ -522,38 +557,41 @@ static void setting_page_ALL_event_handler(lv_event_t* e){
     }
 }
 
-static void setting_page_btnm_1_event_handler(lv_event_t* e){
+static void setting_page_btnm_1_event_handler (lv_event_t *e)
+{
     lv_event_code_t code = lv_event_get_code(e);
-    switch (code){
-    case LV_EVENT_VALUE_CHANGED: {
-        lv_obj_t* obj = lv_event_get_target(e);
+    switch (code) {
+    case LV_EVENT_VALUE_CHANGED:
+    {
+        lv_obj_t * obj = lv_event_get_target(e);
         uint32_t id = lv_buttonmatrix_get_selected_button(obj);
-        lv_ui* ui = &guider_ui;
+        lv_ui * ui = &guider_ui;
 
         // 1. 获取当前点击的按键文本
-        lv_obj_t* my_btnm = lv_event_get_target(e);
+        lv_obj_t * my_btnm = lv_event_get_target(e);
         uint32_t my_id = lv_buttonmatrix_get_selected_button(my_btnm);
-        const char* my_txt = lv_buttonmatrix_get_button_text(my_btnm, my_id);
+        const char * my_txt = lv_buttonmatrix_get_button_text(my_btnm, my_id);
 
-        if (my_txt == NULL) return; // 点到空白处忽略
+        if(my_txt == NULL) return; // 点到空白处忽略
 
         // 2. 核心逻辑判断
-        if (strcmp(my_txt, "X") == 0 || strcmp(my_txt, "x") == 0){
+        if(strcmp(my_txt, "X") == 0 || strcmp(my_txt, "x") == 0) {
             // 【退格键】
-            if (setting_pwd_len > 0){
+            if(setting_pwd_len > 0) {
                 setting_pwd_len--;
                 setting_input_pwd[setting_pwd_len] = '\0';
             }
         }
-        else if (strcmp(my_txt, "V") == 0 || strcmp(my_txt, "v") == 0){
+        else if(strcmp(my_txt, "V") == 0 || strcmp(my_txt, "v") == 0) {
             // 【确认键】
-            if (setting_pwd_len == 4){
-                if (strcmp(setting_input_pwd, admin_pwd) == 0){
+            if(setting_pwd_len == 4) {
+                if(strcmp(setting_input_pwd, admin_pwd) == 0) {
+
                     // ✅ 密码正确，核心动作：隐藏密码框，显示真实的设置菜单！
                     lv_obj_add_flag(ui->setting_page_cont_2, LV_OBJ_FLAG_HIDDEN);
                     lv_obj_clear_flag(ui->setting_page_cont_1, LV_OBJ_FLAG_HIDDEN);
-                }
-                else{
+
+                } else {
                     // ❌ 密码错误
                     lv_label_set_text(ui->setting_page_label_5, "密码错误！请重试！");
                 }
@@ -561,14 +599,14 @@ static void setting_page_btnm_1_event_handler(lv_event_t* e){
                 // 验证完后自动清空密码内部缓存，等待下次输入
                 setting_pwd_len = 0;
                 memset(setting_input_pwd, 0, sizeof(setting_input_pwd));
-            }
-            else{
+
+            } else {
                 lv_label_set_text(ui->setting_page_label_5, "必须输入4位密码！");
             }
         }
-        else{
+        else {
             // 【输入数字键】
-            if (setting_pwd_len < 4){
+            if(setting_pwd_len < 4) {
                 setting_input_pwd[setting_pwd_len] = my_txt[0];
                 setting_pwd_len++;
                 setting_input_pwd[setting_pwd_len] = '\0';
@@ -578,35 +616,35 @@ static void setting_page_btnm_1_event_handler(lv_event_t* e){
         // 3. 屏幕显示更新 (动态改变那四个标签)
         char char_str[2] = {0, 0};
 
-        if (setting_pwd_len > 0){
+        if(setting_pwd_len > 0) {
             char_str[0] = setting_input_pwd[0];
             lv_label_set_text(ui->setting_page_label_1, char_str);
         }
-        else{
+        else {
             lv_label_set_text(ui->setting_page_label_1, "_");
         }
 
-        if (setting_pwd_len > 1){
+        if(setting_pwd_len > 1) {
             char_str[0] = setting_input_pwd[1];
             lv_label_set_text(ui->setting_page_label_2, char_str);
         }
-        else{
+        else {
             lv_label_set_text(ui->setting_page_label_2, "_");
         }
 
-        if (setting_pwd_len > 2){
+        if(setting_pwd_len > 2) {
             char_str[0] = setting_input_pwd[2];
             lv_label_set_text(ui->setting_page_label_3, char_str);
         }
-        else{
+        else {
             lv_label_set_text(ui->setting_page_label_3, "_");
         }
 
-        if (setting_pwd_len > 3){
+        if(setting_pwd_len > 3) {
             char_str[0] = setting_input_pwd[3];
             lv_label_set_text(ui->setting_page_label_4, char_str);
         }
-        else{
+        else {
             lv_label_set_text(ui->setting_page_label_4, "_");
         }
         break;
@@ -616,12 +654,13 @@ static void setting_page_btnm_1_event_handler(lv_event_t* e){
     }
 }
 
-static void setting_page_imgbtn_2_event_handler(lv_event_t* e){
+static void setting_page_imgbtn_2_event_handler (lv_event_t *e)
+{
     lv_event_code_t code = lv_event_get_code(e);
-    switch (code){
-    case LV_EVENT_CLICKED: {
-        ui_load_scr_animation(&guider_ui, &guider_ui.main, guider_ui.main_del, &guider_ui.setting_page_del,
-                              setup_scr_main, LV_SCR_LOAD_ANIM_NONE, 100, 100, true, true);
+    switch (code) {
+    case LV_EVENT_CLICKED:
+    {
+        ui_load_scr_animation(&guider_ui, &guider_ui.main, guider_ui.main_del, &guider_ui.setting_page_del, setup_scr_main, LV_SCR_LOAD_ANIM_NONE, 100, 100, true, true);
         break;
     }
     default:
@@ -629,7 +668,8 @@ static void setting_page_imgbtn_2_event_handler(lv_event_t* e){
     }
 }
 
-void events_init_setting_page(lv_ui* ui){
+void events_init_setting_page (lv_ui *ui)
+{
     lv_obj_add_event_cb(ui->setting_page, setting_page_event_handler, LV_EVENT_ALL, ui);
     lv_obj_add_event_cb(ui->setting_page_imgbtn_1, setting_page_imgbtn_1_event_handler, LV_EVENT_ALL, ui);
     lv_obj_add_event_cb(ui->setting_page_RES, setting_page_RES_event_handler, LV_EVENT_ALL, ui);
@@ -646,5 +686,7 @@ void events_init_setting_page(lv_ui* ui){
 }
 
 
-void events_init(lv_ui* ui){
+void events_init(lv_ui *ui)
+{
+
 }

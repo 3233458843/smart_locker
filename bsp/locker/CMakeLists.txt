@@ -8,4 +8,5 @@ idf_component_register( SRCS
                             esp_driver_uart
                             log
                             XST
+                            nvs_flash
                         )

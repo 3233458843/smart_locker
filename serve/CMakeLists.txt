@@ -1,0 +1,13 @@
+idf_component_register(
+    SRCS
+        "serve.c"
+    INCLUDE_DIRS
+        "."
+    REQUIRES
+        driver
+        freertos
+        log
+        XST
+        locker
+        nvs_flash
+)

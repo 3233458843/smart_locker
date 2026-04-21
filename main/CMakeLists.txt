@@ -16,4 +16,5 @@ idf_component_register(SRCS
                         XST
                         custom
                         generated
+                        serve
                     )

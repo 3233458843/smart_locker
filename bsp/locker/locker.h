@@ -5,6 +5,9 @@
 #include <stdbool.h>
 #include <string.h>
 #include "xst_pack_t.h"
+#include "esp_err.h"
+
+
 
 //柜门控制引脚
 #define locker_user_info_max_len 100 // 用户信息最大长度
@@ -21,7 +24,7 @@
 #define LOCKER4_Detection_GPIO_PIN GPIO_NUM_18 //柜号4检测是否关闭
 
 typedef struct{
-    uint8_t locker_user_info[locker_user_info_max_len];
+    uint8_t locker_user_info[locker_user_info_max_len]; // 用户名称
     uint8_t locker_user_info_id[2]; // 用户信息 ID
 } locker_info_t;
 
@@ -35,8 +38,17 @@ typedef struct{
     uint8_t password[4]; // 锁密码，4 位数字
 } locker_t;
 
+typedef struct {
+    uint16_t user_id;      // XST 用户ID
+    uint8_t locker_id;     // 分配的柜号 0-3
+    uint8_t password[4];   // 4字节密码
+    uint32_t timestamp;    // 存件时间戳
+    bool is_valid;         // 是否有效
+} user_locker_entry_t;
+
 extern locker_t lockers[4]; // 声明 4 个锁实例
 
+// 基础柜门控制接口
 void locker_init(void);
 void locker_on(locker_t* locker);
 void locker_all_on(void);
@@ -45,5 +57,12 @@ void crumble_password(uint8_t* password);
 bool Detection_locker_on_off(const locker_t* locker);
 bool has_item_in_locker(const locker_t* locker);
 bool is_locker_secured(const locker_t* locker);
+
+esp_err_t locker_db_init(void);                    // 初始化，从NVS恢复
+esp_err_t locker_db_add_entry(user_locker_entry_t* entry);  // 添加条目
+esp_err_t locker_db_get_entry_by_user(uint16_t user_id, user_locker_entry_t* entry);
+esp_err_t locker_db_get_entry_by_locker(uint8_t locker_id, user_locker_entry_t* entry);
+uint8_t locker_db_find_free_locker(void);          // 找空闲柜号
+esp_err_t locker_db_save_to_nvs(void);             // 保存到NVS
 
 #endif /* _LOCKER_H_ */

@@ -11,6 +11,8 @@ idf_component_register(
     REQUIRES
         lvgl
         custom
+        driver
         XST
         locker
+        serve
 )

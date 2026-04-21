@@ -17,19 +17,19 @@ void locker_init(void){
     error_t err;
     // 初始化锁的状态和 GPIO 引脚
     lockers[0] = (locker_t){
-        .locker_info = {.locker_user_info = {0}, .locker_user_info_id = {0, 0}}, .locker_id = 0 , .is_locked = false,.have_saved = false,
+        .locker_info = {.locker_user_info = {"locker1"}, .locker_user_info_id = {0, 0}}, .locker_id = 0 , .is_locked = false,.have_saved = false,
         .locker_pin = LOCKER1_GPIO_PIN, .locker_detection_pin = LOCKER1_Detection_GPIO_PIN, .password = {0, 0, 0, 0}
     };
     lockers[1] = (locker_t){
-        .locker_info = {.locker_user_info = {0}, .locker_user_info_id = {0, 0}}, .locker_id = 1 ,.is_locked = false,.have_saved = false,
+        .locker_info = {.locker_user_info = {"locker2"}, .locker_user_info_id = {0, 0}}, .locker_id = 1 ,.is_locked = false,.have_saved = false,
         .locker_pin = LOCKER2_GPIO_PIN, .locker_detection_pin = LOCKER2_Detection_GPIO_PIN, .password = {0, 0, 0, 0}
     };
     lockers[2] = (locker_t){
-        .locker_info = {.locker_user_info = {0}, .locker_user_info_id = {0, 0}}, .locker_id = 2 ,.is_locked = false,.have_saved = false,
+        .locker_info = {.locker_user_info = {"locker3"}, .locker_user_info_id = {0, 0}}, .locker_id = 2 ,.is_locked = false,.have_saved = false,
         .locker_pin = LOCKER3_GPIO_PIN, .locker_detection_pin = LOCKER3_Detection_GPIO_PIN, .password = {0, 0, 0, 0}
     };
     lockers[3] = (locker_t){
-        .locker_info = {.locker_user_info = {0}, .locker_user_info_id = {0, 0}}, .locker_id = 3 ,.is_locked = false,.have_saved = false,
+        .locker_info = {.locker_user_info = {"locker4"}, .locker_user_info_id = {0, 0}}, .locker_id = 3 ,.is_locked = false,.have_saved = false,
         .locker_pin = LOCKER4_GPIO_PIN, .locker_detection_pin = LOCKER4_Detection_GPIO_PIN, .password = {0, 0, 0, 0}
     };
 
@@ -134,12 +134,19 @@ locker_t* get_locker_by_id(uint8_t* id) {
  *
  */
 void crumble_password(uint8_t* password) {
+    if (password == NULL) {
+        ESP_LOGE(TAG, "Password buffer is NULL");
+        return;
+    }
+
     for (uint8_t i = 0; i < sizeof(password); i++) {
         password[i] = 0; // 将密码数据清零
     }
-    ESP_LOGI(TAG, "柜号，密码已清0");
+
+    ESP_LOGI(TAG, "密码已清0");
+
     for (uint8_t i = 0; i < sizeof(password); i++) {
-        password[i] = esp_random() & 0xFF; // 用随机数据覆盖密码
+        password[i] = esp_random() % 10; // 用随机数据覆盖密码
     }
     ESP_LOGI(TAG, "柜号，密码已覆盖随机数据");
     ESP_LOGI(TAG, "柜号密码是：%02X %02X %02X %02X", password[0], password[1], password[2], password[3]);
@@ -191,3 +198,117 @@ bool is_locker_secured(const locker_t* locker){
     return locker->have_saved && (!Detection_locker_on_off(locker));
 }
 
+// ============================================================================
+// 【用户-柜号数据库实现】
+// ============================================================================
+
+#include "nvs.h"
+#include "nvs_flash.h"
+#include <time.h>
+
+static user_locker_entry_t user_locker_db[4] = {0};
+
+/**
+ * 初始化数据库，从 NVS 恢复数据
+ */
+esp_err_t locker_db_init(void){
+    nvs_handle_t nvs_h;
+    esp_err_t err = nvs_open("locker", NVS_READONLY, &nvs_h);
+
+    if (err == ESP_OK){
+        for(int i = 0; i < 4; i++){
+            char key[32];
+            snprintf(key, sizeof(key), "entry_%d", i);
+            size_t len = sizeof(user_locker_entry_t);
+            nvs_get_blob(nvs_h, key, &user_locker_db[i], &len);
+        }
+        nvs_close(nvs_h);
+        ESP_LOGI(TAG, "Locker database loaded from NVS");
+    } else {
+        ESP_LOGI(TAG, "NVS not found, using fresh database");
+    }
+    return ESP_OK;
+}
+
+/**
+ * 添加用户-柜号绑定条目
+ */
+esp_err_t locker_db_add_entry(user_locker_entry_t* entry){
+    if(entry == NULL || entry->locker_id >= 4){
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    // 添加到内存数据库
+    memcpy(&user_locker_db[entry->locker_id], entry, sizeof(user_locker_entry_t));
+
+    // 更新柜子状态
+    lockers[entry->locker_id].have_saved = true;
+    memcpy(lockers[entry->locker_id].password, entry->password, 4);
+
+    // 保存到 NVS
+    return locker_db_save_to_nvs();
+}
+
+/**
+ * 按用户ID查找绑定条目
+ */
+esp_err_t locker_db_get_entry_by_user(uint16_t user_id, user_locker_entry_t* entry){
+    if(entry == NULL){
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    for(int i = 0; i < 4; i++){
+        if(user_locker_db[i].user_id == user_id && user_locker_db[i].is_valid){
+            memcpy(entry, &user_locker_db[i], sizeof(user_locker_entry_t));
+            return ESP_OK;
+        }
+    }
+    return ESP_ERR_NOT_FOUND;
+}
+
+/**
+ * 按柜号查找绑定条目
+ */
+esp_err_t locker_db_get_entry_by_locker(uint8_t locker_id, user_locker_entry_t* entry){
+    if(entry == NULL || locker_id >= 4){
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if(user_locker_db[locker_id].is_valid){
+        memcpy(entry, &user_locker_db[locker_id], sizeof(user_locker_entry_t));
+        return ESP_OK;
+    }
+    return ESP_ERR_NOT_FOUND;
+}
+
+/**
+ * 查找空闲柜号（have_saved=false）
+ */
+uint8_t locker_db_find_free_locker(void){
+    for(int i = 0; i < 4; i++){
+        if(!lockers[i].have_saved){
+            return i;
+        }
+    }
+    return 0xFF;  // 无空闲柜
+}
+
+/**
+ * 保存数据库到 NVS
+ */
+esp_err_t locker_db_save_to_nvs(void){
+    nvs_handle_t nvs_h;
+    esp_err_t err = nvs_open("locker", NVS_READWRITE, &nvs_h);
+
+    if(err == ESP_OK){
+        for(int i = 0; i < 4; i++){
+            char key[32];
+            snprintf(key, sizeof(key), "entry_%d", i);
+            nvs_set_blob(nvs_h, key, &user_locker_db[i], sizeof(user_locker_entry_t));
+        }
+        err = nvs_commit(nvs_h);
+        nvs_close(nvs_h);
+        ESP_LOGI(TAG, "Locker database saved to NVS");
+    }
+    return err;
+}
