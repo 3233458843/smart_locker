@@ -61,7 +61,6 @@ static void lvgl_demo_task(void* arg){
 
     setup_ui(&guider_ui);
     events_init(&guider_ui);
-
     // 柜门状态LED
     if (lockers[0].is_locked == true){
         lv_obj_set_style_bg_color(guider_ui.main_locker1, lv_color_hex(0x00FF00), 0);
@@ -247,7 +246,7 @@ void app_main(void){
 
     locker_init();
     // 初始化 locker 数据库（从 NVS 恢复数据）
-    // locker_db_init();
+    locker_db_init();
     // 检查柜门状态
     for (uint8_t i = 0; i < 4; i++){
         if (Detection_locker_on_off(&lockers[i])){

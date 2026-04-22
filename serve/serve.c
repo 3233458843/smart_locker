@@ -67,6 +67,50 @@ void ready_take_task(void* param){
         if (xSemaphoreTake(ready_take, portMAX_DELAY) == pdTRUE){
             ESP_LOGI(SERVE_TAG, "Received ready_take signal, can start take process...");
 
+            uint16_t verified_user_id = 0;
+            char verified_name[32] = {0};
+            user_locker_entry_t locker_entry = {0};
+
+            xst_result_t verify_res = xst_cmd_verify(10, &verified_user_id, verified_name);
+            if (verify_res != MR_SUCCESS){
+                ESP_LOGE(SERVE_TAG, "Failed to verify user, res=%d", verify_res);
+                continue;
+            }
+
+            esp_err_t db_err = locker_db_get_entry_by_user(verified_user_id, &locker_entry);
+            if (db_err != ESP_OK){
+                ESP_LOGW(SERVE_TAG, "No locker binding found for user_id=%u", verified_user_id);
+                continue;
+            }
+
+            if (locker_entry.locker_id >= 4){
+                ESP_LOGE(SERVE_TAG, "Invalid locker_id=%u for user_id=%u", locker_entry.locker_id, verified_user_id);
+                continue;
+            }
+
+            ESP_LOGI(SERVE_TAG, "Verify success for user_id=%u name=%s, opening locker %u",
+                     verified_user_id,
+                     verified_name,
+                     locker_entry.locker_id + 1);
+            locker_on(&lockers[locker_entry.locker_id]);
+
+            xst_result_t del_res = xst_cmd_del_user(verified_user_id);
+            if (del_res != MR_SUCCESS){
+                ESP_LOGW(SERVE_TAG, "Locker opened but failed to delete user_id=%u from XST, res=%d", verified_user_id, del_res);
+                continue;
+            }
+
+            db_err = locker_db_remove_entry_by_locker(locker_entry.locker_id);
+            if (db_err != ESP_OK){
+                ESP_LOGE(SERVE_TAG, "Locker opened and XST user deleted, but failed to clear locker %u binding: %s",
+                         locker_entry.locker_id + 1,
+                         esp_err_to_name(db_err));
+                continue;
+            }
+
+            ESP_LOGI(SERVE_TAG, "Take flow completed for user_id=%u, locker %u released",
+                     verified_user_id,
+                     locker_entry.locker_id + 1);
         }
         vTaskDelay(pdMS_TO_TICKS(100)); // 模拟取件处理时间
     }
@@ -76,49 +120,56 @@ void ready_save_task(void* param){
     while (1){
         if (xSemaphoreTake(ready_save, portMAX_DELAY) == pdTRUE){
             ESP_LOGI(SERVE_TAG, "Received ready_save signal, can start save process...");
-            // 先判断四个柜子有没有登记信息
-            for (uint8_t i = 0 ; i < 4 ; i ++ ){
-                if (lockers [i] . locker_info .locker_user_info_id [0] == 0 && lockers [i] . locker_info .locker_user_info_id [1] == 0){
-                    ESP_LOGI(SERVE_TAG, "Locker %d is free", lockers[i].locker_id + 1);
-                    lockers[i].have_saved = false ;
-                }
-                else{
-                    ESP_LOGI(SERVE_TAG, "Locker %d is occupied by user ID: %02X%02X", lockers[i].locker_id + 1,
-                             lockers[i].locker_info.locker_user_info_id[0], lockers[i].locker_info.locker_user_info_id[1]);
-                    lockers[i].have_saved = true ;
-                }
+
+            uint8_t locker_id = locker_db_find_free_locker();
+            if (locker_id >= 4){
+                ESP_LOGW(SERVE_TAG, "No free locker available for save flow");
+                continue;
             }
 
-            // 从头开始找一个没有登记信息的柜子来进行存件
-            for ( uint8_t i = 0 ; i < 4 ; i ++ ){
-                //确认该柜没有存件
-                if (lockers[i].have_saved == false){
-                    uint16_t new_user_id = 0 ;
-                    // 发送注册序列并储存好生成的用户ID
-                    if (MR_SUCCESS == xst_cmd_enroll_single((const char *)lockers[i].locker_info.locker_user_info, 1, 10, &new_user_id))
-                    {
-                        ESP_LOGI(SERVE_TAG, "Enrolled new user with ID: %d for locker %d", new_user_id, lockers[i].locker_id + 1);
-                        // 将生成好的用户ID存放到储物柜单元结构体
-                        lockers[i].locker_info.locker_user_info_id[0] = (new_user_id >> 8) & 0xFF;
-                        lockers[i].locker_info.locker_user_info_id[1] = new_user_id & 0xFF;
-                        lockers[i].have_saved = true ;
-
-                        // 生成一下随机的4位密码，覆盖掉之前的默认密码
-                        crumble_password(lockers[i].password);
-
-                        // 这里要将密码推送到手机还要显示到屏幕上
-
-                        //打开柜门
-                        vTaskDelay(pdMS_TO_TICKS(1000));
-                        locker_on(&lockers[i]);
-                    }
-                    else{
-                        ESP_LOGE(SERVE_TAG, "Failed to enroll user for locker %d", lockers[i].locker_id + 1);
-                    }
-                    break;
-                }
+            uint16_t new_user_id = 0;
+            locker_t *target_locker = &lockers[locker_id];
+            xst_result_t enroll_res = xst_cmd_enroll_single((const char *)target_locker->locker_info.locker_user_info,
+                                                            1,
+                                                            10,
+                                                            &new_user_id);
+            if (enroll_res != MR_SUCCESS){
+                ESP_LOGE(SERVE_TAG, "Failed to enroll user for locker %d, res=%d",
+                         target_locker->locker_id + 1,
+                         enroll_res);
+                continue;
             }
 
+            crumble_password(target_locker->password);
+
+            user_locker_entry_t locker_entry = {
+                .user_id = new_user_id,
+                .locker_id = target_locker->locker_id,
+                .timestamp = (uint32_t)xTaskGetTickCount(),
+                .is_valid = true,
+            };
+            memcpy(locker_entry.password, target_locker->password, sizeof(locker_entry.password));
+
+            esp_err_t db_err = locker_db_add_entry(&locker_entry);
+            if (db_err != ESP_OK){
+                ESP_LOGE(SERVE_TAG, "Failed to save locker binding for locker %d: %s",
+                         target_locker->locker_id + 1,
+                         esp_err_to_name(db_err));
+                xst_cmd_del_user(new_user_id);
+                continue;
+            }
+
+            ESP_LOGI(SERVE_TAG,
+                     "Save flow success: user_id=%u locker=%u password=%d%d%d%d",
+                     new_user_id,
+                     target_locker->locker_id + 1,
+                     locker_entry.password[0],
+                     locker_entry.password[1],
+                     locker_entry.password[2],
+                     locker_entry.password[3]);
+
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            locker_on(target_locker);
         }
         vTaskDelay(pdMS_TO_TICKS(100)); // 模拟存件处理时间
     }

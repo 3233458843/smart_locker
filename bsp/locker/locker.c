@@ -139,17 +139,19 @@ void crumble_password(uint8_t* password) {
         return;
     }
 
-    for (uint8_t i = 0; i < sizeof(password); i++) {
-        password[i] = 0; // 将密码数据清零
+    for (uint8_t i = 0; i < 4; i++) {
+        password[i] = esp_random() % 10;
+    }
+    // 确保生成的密码不全为0，避免过于简单
+    while (password[0] == 0 && password[1] == 0 && password[2] == 0 && password[3] == 0){
+        for (uint8_t i = 0; i < 4; i++){
+            password[i] = esp_random() % 10;
+        }
+        continue;
     }
 
-    ESP_LOGI(TAG, "密码已清0");
-
-    for (uint8_t i = 0; i < sizeof(password); i++) {
-        password[i] = esp_random() % 10; // 用随机数据覆盖密码
-    }
-    ESP_LOGI(TAG, "柜号，密码已覆盖随机数据");
-    ESP_LOGI(TAG, "柜号密码是：%02X %02X %02X %02X", password[0], password[1], password[2], password[3]);
+    ESP_LOGI(TAG, "4位数字密码已生成: %d%d%d%d",
+             password[0], password[1], password[2], password[3]);
 }
 
 /**
@@ -215,12 +217,31 @@ esp_err_t locker_db_init(void){
     nvs_handle_t nvs_h;
     esp_err_t err = nvs_open("locker", NVS_READONLY, &nvs_h);
 
+    memset(user_locker_db, 0, sizeof(user_locker_db));
+    for (int i = 0; i < 4; i++){
+        lockers[i].have_saved = false;
+        memset(lockers[i].password, 0, sizeof(lockers[i].password));
+        lockers[i].locker_info.locker_user_info_id[0] = 0;
+        lockers[i].locker_info.locker_user_info_id[1] = 0;
+    }
+
     if (err == ESP_OK){
         for(int i = 0; i < 4; i++){
             char key[32];
             snprintf(key, sizeof(key), "entry_%d", i);
             size_t len = sizeof(user_locker_entry_t);
-            nvs_get_blob(nvs_h, key, &user_locker_db[i], &len);
+            esp_err_t get_err = nvs_get_blob(nvs_h, key, &user_locker_db[i], &len);
+            if (get_err != ESP_OK){
+                memset(&user_locker_db[i], 0, sizeof(user_locker_entry_t));
+                continue;
+            }
+
+            if (user_locker_db[i].is_valid){
+                lockers[i].have_saved = true;
+                memcpy(lockers[i].password, user_locker_db[i].password, sizeof(lockers[i].password));
+                lockers[i].locker_info.locker_user_info_id[0] = (user_locker_db[i].user_id >> 8) & 0xFF;
+                lockers[i].locker_info.locker_user_info_id[1] = user_locker_db[i].user_id & 0xFF;
+            }
         }
         nvs_close(nvs_h);
         ESP_LOGI(TAG, "Locker database loaded from NVS");
@@ -244,6 +265,8 @@ esp_err_t locker_db_add_entry(user_locker_entry_t* entry){
     // 更新柜子状态
     lockers[entry->locker_id].have_saved = true;
     memcpy(lockers[entry->locker_id].password, entry->password, 4);
+    lockers[entry->locker_id].locker_info.locker_user_info_id[0] = (entry->user_id >> 8) & 0xFF;
+    lockers[entry->locker_id].locker_info.locker_user_info_id[1] = entry->user_id & 0xFF;
 
     // 保存到 NVS
     return locker_db_save_to_nvs();
@@ -279,6 +302,23 @@ esp_err_t locker_db_get_entry_by_locker(uint8_t locker_id, user_locker_entry_t* 
         return ESP_OK;
     }
     return ESP_ERR_NOT_FOUND;
+}
+
+/**
+ * 按柜号清除绑定条目
+ */
+esp_err_t locker_db_remove_entry_by_locker(uint8_t locker_id){
+    if (locker_id >= 4){
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    memset(&user_locker_db[locker_id], 0, sizeof(user_locker_entry_t));
+    lockers[locker_id].have_saved = false;
+    memset(lockers[locker_id].password, 0, sizeof(lockers[locker_id].password));
+    lockers[locker_id].locker_info.locker_user_info_id[0] = 0;
+    lockers[locker_id].locker_info.locker_user_info_id[1] = 0;
+
+    return locker_db_save_to_nvs();
 }
 
 /**
