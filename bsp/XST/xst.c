@@ -468,23 +468,36 @@ static xst_result_t xst_exec_cmd(uint8_t cmd, uint8_t* tx_data, uint16_t tx_len,
     xQueueReset(xst_reply_queue);
     xst_send_packet(cmd, tx_data, tx_len);
 
+    TickType_t start_tick = xTaskGetTickCount();
+    TickType_t timeout_ticks = pdMS_TO_TICKS(timeout);
     queue_item_t item;
-    if (xQueueReceive(xst_reply_queue, &item, pdMS_TO_TICKS(timeout)) == pdTRUE){
+
+    while (1){
+        TickType_t elapsed_ticks = xTaskGetTickCount() - start_tick;
+        if (elapsed_ticks >= timeout_ticks){
+            break;
+        }
+
+        TickType_t remaining_ticks = timeout_ticks - elapsed_ticks;
+        if (xQueueReceive(xst_reply_queue, &item, remaining_ticks) != pdTRUE){
+            break;
+        }
+
         if (item.data == NULL || item.len < 2){
             ESP_LOGW(XST_TAG, "=> [xst_exec_cmd] 收到非法回复包，长度=%u", item.len);
             if (item.data != NULL){
                 free(item.data);
             }
-            return MR_FAILED4_UNKNOWN_REASON;
+            continue;
         }
 
         xst_reply_body_t* body = (xst_reply_body_t*)item.data;
         ESP_LOGI(XST_TAG, "=> [xst_exec_cmd] 收到回复, body->mid=0x%02X, 期望cmd=0x%02X", body->mid, cmd);
 
         if (body->mid != cmd){
-            ESP_LOGW(XST_TAG, "=> [xst_exec_cmd] 命令ID不匹配! 丢弃此回复");
+            ESP_LOGW(XST_TAG, "=> [xst_exec_cmd] 命令ID不匹配! 丢弃此回复并继续等待目标命令回复");
             free(item.data);
-            return MR_FAILED4_UNKNOWN_REASON;
+            continue;
         }
 
         xst_result_t res = (xst_result_t)body->result;
@@ -507,6 +520,7 @@ static xst_result_t xst_exec_cmd(uint8_t cmd, uint8_t* tx_data, uint16_t tx_len,
         free(item.data);
         return res;
     }
+
     ESP_LOGW(XST_TAG, "=> [xst_exec_cmd] 等待回复超时 (%lu ms), 命令: 0x%02X", (unsigned long)timeout, cmd);
     return MR_FAILED4_TIME_OUT;
 }
@@ -521,7 +535,7 @@ xst_result_t xst_cmd_reset(void){
     gpio_set_level(XST_POWER_PIN , 1 );
     vTaskDelay(pdMS_TO_TICKS(500));
     gpio_set_level(XST_POWER_PIN , 0);
-    return xst_exec_cmd(MID_RESET, NULL, 0, NULL, NULL, 2000);
+    return xst_exec_cmd(MID_RESET, NULL, 0, NULL, NULL, 10000);
 }
 
 /** 获取XST模组状态
@@ -662,20 +676,53 @@ xst_result_t xst_cmd_del_all(void){
     return xst_exec_cmd(MID_DEL_ALL, NULL, 0, NULL, NULL, 10000);
 }
 
+/** XST获取已注册的用户ID列表
+ *
+ * @param user_ids 用户ID输出数组，可为 NULL（只获取数量）
+ * @param max_users user_ids 数组最多可写入的数量
+ * @param count 用户数量指针，成功时写入本次已解析出的用户数量
+ * @return xst_result_t 错误码
+ */
+xst_result_t xst_cmd_get_all_user_ids(uint16_t* user_ids, uint16_t max_users, uint16_t* count){
+    uint8_t* data = NULL;
+    uint16_t len = 0;
+    xst_result_t res = xst_exec_cmd(MID_GET_ALL_USER_ID, NULL, 0, &data, &len, 2000);
+
+    if (res == MR_SUCCESS && data != NULL && len >= 1){
+        uint16_t reported_count = data[0];
+        uint16_t available_count = (len > 1) ? (uint16_t)((len - 1) / 2) : 0;
+        uint16_t parsed_count = reported_count;
+
+        if (parsed_count > available_count){
+            parsed_count = available_count;
+        }
+        if (user_ids != NULL && parsed_count > max_users){
+            parsed_count = max_users;
+        }
+
+        if (user_ids != NULL){
+            for (uint16_t i = 0; i < parsed_count; i++){
+                uint16_t offset = (uint16_t)(1 + i * 2);
+                user_ids[i] = (uint16_t)(((uint16_t)data[offset] << 8) | data[offset + 1]);
+            }
+        }
+
+        if (count != NULL){
+            *count = parsed_count;
+        }
+        ESP_LOGI(XST_TAG, "Get all user ids success: reported=%u parsed=%u",
+                 (unsigned int)reported_count,
+                 (unsigned int)parsed_count);
+    }
+    if (data) free(data);
+    return res;
+}
+
 /** XST获取已注册的用户
  *
  * @param count 用户数量指针，成功时写入用户数量，失败时不修改
  * @return xst_result_t 错误码
  */
 xst_result_t xst_cmd_get_user_count(uint16_t* count){
-    uint8_t* data = NULL;
-    uint16_t len = 0;
-    xst_result_t res = xst_exec_cmd(MID_GET_ALL_USER_ID, NULL, 0, &data, &len, 2000);
-
-    if (res == MR_SUCCESS && data != NULL && len >= 1 && count != NULL){
-        *count = data[0];
-        ESP_LOGI(XST_TAG, "Get user count success: count=%u", (unsigned int)*count);
-    }
-    if (data) free(data);
-    return res;
+    return xst_cmd_get_all_user_ids(NULL, 0, count);
 }

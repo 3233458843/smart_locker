@@ -62,7 +62,10 @@ esp_err_t locker_db_init(void);                    // 初始化，从NVS恢复
 esp_err_t locker_db_add_entry(user_locker_entry_t* entry);  // 添加条目
 esp_err_t locker_db_get_entry_by_user(uint16_t user_id, user_locker_entry_t* entry);
 esp_err_t locker_db_get_entry_by_locker(uint8_t locker_id, user_locker_entry_t* entry);
+esp_err_t locker_db_get_entry_by_password(const uint8_t password[4], user_locker_entry_t* entry);
 esp_err_t locker_db_remove_entry_by_locker(uint8_t locker_id);
+esp_err_t locker_db_clear_all(void);
+esp_err_t locker_db_sync_with_xst_users(const uint16_t* xst_user_ids, uint16_t xst_user_count);
 uint8_t locker_db_find_free_locker(void);          // 找空闲柜号
 esp_err_t locker_db_save_to_nvs(void);             // 保存到NVS
 

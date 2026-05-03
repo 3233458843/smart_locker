@@ -11,7 +11,7 @@
 #define TOUCH_INT_PIN       14
 
 
-#define TOUCH_I2C_FREQ_HZ   (100 * 1000) // FT6336支持400kHz高速I2C
+#define TOUCH_I2C_FREQ_HZ   (200 * 1000) // FT6336支持400kHz高速I2C
 #define FT6336U_I2C_ADDR    0x38
 
 /* 触摸数据结构 (专为对接 LVGL 设计) */

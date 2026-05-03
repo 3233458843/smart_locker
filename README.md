@@ -254,7 +254,7 @@ cd E:\esp_code\smart_locker
    - 返回 UI，显示密码和柜号
 6. 用户放入物品后关闭柜门，系统自动检测门关闭（GPIO 检测引脚）
 
-### 取件流程（Take Flow）
+### 取件流程（Take Flow - 掌纹）
 1. 用户在 LVGL 主页点击"取件"按钮
 2. 屏幕切换到掌纹验证页，显示 10 秒倒计时
 3. `take_page_verify_task()` 异步调用 `xst_cmd_verify()`，验证掌纹
@@ -267,12 +267,16 @@ cd E:\esp_code\smart_locker
    - 调用 `locker_db_remove_entry_by_locker()` 清除 NVS 绑定
    - 柜位恢复为空闲状态
 
+### 取件流程（Take Flow - 密码）
+1. 用户在取件页面点击"密码"按钮切换到密码输入模式
+2. 通过4位密码键盘输入4位密码
+3. `serve_request_take_by_password()` 在 NVS 中查找对应柜号
+4. 执行开柜、清除绑定（同掌纹取件流程）
+
 ### 实时状态监控（`main_serve` 任务）
-- 每 1 秒循环执行
+- 每 2 秒循环执行
 - 读取 4 个柜位的门传感器 GPIO
-- 根据 `Detection_locker_on_off()` 的返回值更新 UI：
-  - 门关闭（GPIO = 0）➜ UI 显示绿色
-  - 门打开（GPIO = 1）➜ UI 显示红色
+- 仅监测硬件状态，UI 更新由 `lvgl_demo_task` 处理：
 
 ### 蜂鸣器反馈
 - 系统启动时：短鸣 1 次（`BUZZER_BEEP_SHORT`）
@@ -340,9 +344,16 @@ void my_async_task(void* param) {
 
 - [x] **核心业务逻辑**
   - [x] 存件流程：掌纹录入 → 自动分配柜号 → 密码生成 → 开柜
-  - [x] 取件流程：掌纹验证 → 查询绑定 → 开柜 → 数据清除
+  - [x] 取件流程（掌纹）：掌纹验证 → 查询绑定 → 开柜 → 数据清除
+  - [x] 取件流程（密码）：4位密码输入 → NVS查询 → 开柜 → 数据清除
   - [x] 物品存放检测（独立于门状态）
   - [x] 柜门状态实时监控
+
+- [x] **XST 管理员接口**
+  - [x] 模组复位（RES 按钮）
+  - [x] 用户数读取（READ 按钮）
+  - [x] 用户删除（DELL 按钮）
+  - [x] 识别测试（VERI 按钮）
 
 - [x] **数据持久化**
   - [x] NVS 用户-柜号-密码绑定存储
@@ -352,21 +363,19 @@ void my_async_task(void* param) {
 - [x] **系统集成**
   - [x] FreeRTOS 多任务架构（LVGL、业务、状态监控）
   - [x] 信号量驱动的异步业务流程
-  - [x] WiFi AP + TCP 服务器（预留用于手机交互）
+  - [x] WiFi AP + TCP 调试透传
   - [x] 实时 UI 状态更新
+  - [x] 密码取件界面（4位密码输入键盘）
+  - [x] 管理员 Setting 页面（密码保护）
 
 ### 🔄 进行中功能
-- [ ] **XST 管理员接口**（需完善 Setting 页面）
-  - [ ] 连接 XST 模块参数查询
-  - [ ] 用户列表管理（读取/删除）
-  - [ ] 模块固件版本显示
-
-- [ ] **WiFi/TCP 通信**
-  - [ ] 手机端与主控通信协议定义
-  - [ ] 远程存/取件控制
-  - [ ] 推送密码到手机
+- [ ] **OTA 升级**：预留分区，实现固件远程更新
+- [ ] **多语言支持**：中英文切换
+- [ ] **日志系统**：记录存/取操作时间戳与用户信息
+- [ ] **故障诊断**：传感器/执行器自检
 
 ### ⏳ 计划中功能
+- [ ] **远程控制**：手机端完整存/取件控制与密码推送
 - [ ] **OTA 升级**：预留分区，实现固件远程更新
 - [ ] **多语言支持**：中英文切换
 - [ ] **管理员认证**：密码/指纹保护 Setting 页面
@@ -402,3 +411,38 @@ void my_async_task(void* param) {
 - [LVGL 官方文档](https://docs.lvgl.io/)
 - [FreeRTOS 教程](https://www.freertos.org/index.html)
 - [ESP32-S3 芯片规格书](https://www.espressif.com/sites/default/files/documentation/esp32-s3_datasheet_cn.pdf)
+
+## 🐛 修复历史
+
+### 2026-04-26 版本：关键性能修复
+**问题**：
+1. 看门狗持续超时 (Task Watchdog Triggered)
+   - 原因：`main_serve` 任务在 CPU 1 上不断调用 LVGL UI 函数 (`lv_obj_set_style_bg_color`)
+   - 影响：LVGL 不是线程安全的，多任务并发调用导致长时间阻塞
+   
+2. XST 掌纹识别超时错误 (res=13: TIME_OUT)
+   - 原因：单次失败后无重试机制
+   - 影响：任何网络抖动或设备响应延迟都会导致流程失败
+
+**修复**：
+1. 移除 `main_serve` 中的 LVGL 直接调用
+   - 改为仅监测柜门硬件状态（GPIO 输入）
+   - UI 更新统一由 `lvgl_demo_task`（LVGL 核心任务）处理
+   - 增加检测周期至 2 秒，进一步降低 CPU 占用
+   
+2. 添加 XST 掌纹识别重试机制
+   - `ready_save_task` 中录入时最多重试 3 次
+   - 重试间隔 1 秒，避免设备还未就绪
+   - 完整的错误状态跟踪和日志记录
+   
+3. 改进状态跟踪与错误处理
+   - 新增 `serve_save_status_t` 结构体记录完整流程状态
+   - 添加 `serve_get_save_status()` 接口供 UI 查询
+   - 详细的错误信息反馈
+
+**编译结果**：✅ 成功  
+**文件修改**：
+- `main/main.c`：重构 `main_serve()` 任务
+- `serve/serve.c`：添加重试机制和状态管理
+
+

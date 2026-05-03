@@ -1,9 +1,6 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "freertos/semphr.h"
 #include "nvs_flash.h"
-#include "freertos/timers.h"
-#include "esp_system.h"
 #include "driver/uart.h"
 #include "esp_timer.h"
 #include "esp_log.h"
@@ -12,13 +9,10 @@
 #include "lwip/sockets.h"
 
 #include "lvgl.h"
-// #include "demos/lv_demos.h"
-
 #include "../bsp/ui/generated/gui_guider.h"
 #include "../bsp/ui/generated/events_init.h"
 
 #include "xst.h"
-#include "xst_pack_t.h"
 
 #include "locker.h"
 
@@ -34,6 +28,58 @@
 #define TCP_PORT 8080
 // ------------------------------------------------------------------------------------
 static esp_timer_handle_t lvgl_tick_timer = NULL;
+static bool g_locker_status_shown[4] = {false, false, false, false};
+static lv_obj_t* g_locker_status_bound_main = NULL;
+
+static void main_locker_status_cache_reset(void){
+    for (uint8_t i = 0; i < 4; i++){
+        g_locker_status_shown[i] = false;
+    }
+    g_locker_status_bound_main = NULL;
+}
+
+static bool main_locker_status_widget_is_valid(lv_obj_t* obj){
+    return obj != NULL && lv_obj_is_valid(obj);
+}
+
+static bool main_locker_status_need_refresh(void){
+    lv_obj_t* locker_widgets[4] = {
+        guider_ui.main_locker1,
+        guider_ui.main_locker2,
+        guider_ui.main_locker3,
+        guider_ui.main_locker4,
+    };
+
+    if (!main_locker_status_widget_is_valid(guider_ui.main)){
+        return false;
+    }
+
+    if (g_locker_status_bound_main != guider_ui.main){
+        return true;
+    }
+
+    for (uint8_t i = 0; i < 4; i++){
+        if (!main_locker_status_widget_is_valid(locker_widgets[i])){
+            return false;
+        }
+    }
+
+    return false;
+}
+
+static void main_locker_status_apply(lv_obj_t* widget, bool occupied){
+    if (!main_locker_status_widget_is_valid(widget)){
+        return;
+    }
+
+    lv_obj_set_style_radius(widget, LV_RADIUS_CIRCLE, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(widget, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_width(widget, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_all(widget, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(widget,
+                              occupied ? lv_color_hex(0xFF0000) : lv_color_hex(0x2FDA64),
+                              LV_PART_MAIN | LV_STATE_DEFAULT);
+}
 
 lv_ui guider_ui; // 全局 UI 结构体实例
 
@@ -55,44 +101,83 @@ void lvgl_tick_timer_init(void){
     esp_timer_start_periodic(lvgl_tick_timer, 1000); // 1ms 触发
 }
 
+static void main_locker_status_styles_init(void){
+    lv_obj_t* locker_widgets[4] = {
+        guider_ui.main_locker1,
+        guider_ui.main_locker2,
+        guider_ui.main_locker3,
+        guider_ui.main_locker4,
+    };
+
+    main_locker_status_cache_reset();
+
+    if (!main_locker_status_widget_is_valid(guider_ui.main)){
+        return;
+    }
+
+    g_locker_status_bound_main = guider_ui.main;
+
+    for (uint8_t i = 0; i < 4; i++){
+        lv_obj_t* widget = locker_widgets[i];
+        if (!main_locker_status_widget_is_valid(widget)){
+            continue;
+        }
+        g_locker_status_shown[i] = has_item_in_locker(&lockers[i]);
+        main_locker_status_apply(widget, g_locker_status_shown[i]);
+    }
+}
+
+static void main_locker_status_update_task(void){
+    if (lv_screen_active() != guider_ui.main){
+        main_locker_status_cache_reset();
+        return;
+    }
+
+    if (main_locker_status_need_refresh()){
+        main_locker_status_styles_init();
+    }
+
+    lv_obj_t* locker_widgets[4] = {
+        guider_ui.main_locker1,
+        guider_ui.main_locker2,
+        guider_ui.main_locker3,
+        guider_ui.main_locker4,
+    };
+
+    for (uint8_t i = 0; i < 4; i++){
+        if (!main_locker_status_widget_is_valid(locker_widgets[i])){
+            continue;
+        }
+
+        bool occupied = has_item_in_locker(&lockers[i]);
+        if (occupied == g_locker_status_shown[i]){
+            continue;
+        }
+
+        main_locker_status_apply(locker_widgets[i], occupied);
+        g_locker_status_shown[i] = occupied;
+    }
+}
+
 /* LVGL demo 任务 - 运行在独立任务中，避免主任务栈溢出 */
-static void lvgl_demo_task(void* arg){
+static void lvgl_task(void* arg){
     (void)arg;
 
     setup_ui(&guider_ui);
     events_init(&guider_ui);
-    // 柜门状态LED
-    if (lockers[0].is_locked == true){
-        lv_obj_set_style_bg_color(guider_ui.main_locker1, lv_color_hex(0x00FF00), 0);
-    }
-    else{
-        lv_obj_set_style_bg_color(guider_ui.main_locker1, lv_color_hex(0xFF0000), 0);
-    }
-
-    if (lockers[1].is_locked == true){
-        lv_obj_set_style_bg_color(guider_ui.main_locker2, lv_color_hex(0x00FF00), 0);
-    }
-    else{
-        lv_obj_set_style_bg_color(guider_ui.main_locker2, lv_color_hex(0xFF0000), 0);
-    }
-
-    if (lockers[2].is_locked == true){
-        lv_obj_set_style_bg_color(guider_ui.main_locker3, lv_color_hex(0x00FF00), 0);
-    }
-    else{
-        lv_obj_set_style_bg_color(guider_ui.main_locker3, lv_color_hex(0xFF0000), 0);
-    }
-
-    if (lockers[3].is_locked == true){
-        lv_obj_set_style_bg_color(guider_ui.main_locker4, lv_color_hex(0x00FF00), 0);
-    }
-    else{
-        lv_obj_set_style_bg_color(guider_ui.main_locker4, lv_color_hex(0xFF0000), 0);
-    }
+    main_locker_status_styles_init();
+    main_locker_status_update_task();
 
     ESP_LOGI(TAG, "LVGL started");
 
+    TickType_t last_status_refresh = xTaskGetTickCount();
     while (1){
+        TickType_t now = xTaskGetTickCount();
+        if ((now - last_status_refresh) >= pdMS_TO_TICKS(1000)){
+            main_locker_status_update_task();
+            last_status_refresh = now;
+        }
+
         lv_task_handler(); // LVGL 任务管理
         vTaskDelay(pdMS_TO_TICKS(10)); // 延迟 10ms
     }
@@ -115,6 +200,40 @@ void xst_note_cb(uint8_t nid, uint8_t* data, uint16_t len){
         ESP_LOGI(TAG, "收到其他通知，长度: %d", len);
         break;
     }
+}
+
+// ------------------------------------------------------------------------------------
+static void power_on_locker_xst_sync(void){
+    uint16_t xst_user_ids[64] = {0};
+    uint16_t xst_user_count = 0;
+    xst_result_t res = MR_FAILED4_TIME_OUT;
+
+    ESP_LOGI(TAG, "Power-on locker/XST sync start");
+    for (uint8_t attempt = 0; attempt < 3; attempt++){
+        res = xst_cmd_get_all_user_ids(xst_user_ids,
+                                       (uint16_t)(sizeof(xst_user_ids) / sizeof(xst_user_ids[0])),
+                                       &xst_user_count);
+        if (res == MR_SUCCESS){
+            break;
+        }
+        ESP_LOGW(TAG, "Power-on locker/XST sync read attempt %u/3 failed, res=%d",
+                 attempt + 1,
+                 res);
+        vTaskDelay(pdMS_TO_TICKS(500));
+    }
+
+    if (res != MR_SUCCESS){
+        ESP_LOGW(TAG, "Power-on locker/XST sync skipped: failed to read XST users, res=%d", res);
+        return;
+    }
+
+    esp_err_t err = locker_db_sync_with_xst_users(xst_user_ids, xst_user_count);
+    if (err != ESP_OK){
+        ESP_LOGE(TAG, "Power-on locker/XST sync failed: %s", esp_err_to_name(err));
+        return;
+    }
+
+    ESP_LOGI(TAG, "Power-on locker/XST sync done, xst_user_count=%u", (unsigned int)xst_user_count);
 }
 
 // ------------------------------------------------------------------------------------
@@ -187,42 +306,26 @@ void tcp_server_task(void* pvParameters){
 
 // ------------------------------------------------------------------------------------
 /**main 主要逻辑编辑
+ * LVGL UI 更新已集成到 lvgl_demo_task 中，此任务仅用于监测
  */
-void main_serve(void *arg){
+void main_serve(void* arg){
     (void)arg;
     while (1){
-        // 实时更新主页柜子状态显示
-        if (lockers[0].is_locked == true){
-            lv_obj_set_style_bg_color(guider_ui.main_locker1, lv_color_hex(0xFF0000), 0);
+        // 定期检查柜子状态（非 UI 操作）
+        for (uint8_t i = 0; i < 4; i++){
+            // 检测柜门物理状态
+            bool current_state = Detection_locker_on_off(&lockers[i]);
+            if (current_state != lockers[i].is_locked){
+                lockers[i].is_locked = current_state;
+                ESP_LOGI(TAG, "Locker %d state changed to: %s",
+                         i + 1,
+                         current_state ? "locked" : "unlocked");
+            }
         }
-        else{
-            lv_obj_set_style_bg_color(guider_ui.main_locker1, lv_color_hex(0x00FF00), 0);
-        }
-
-        if (lockers[1].is_locked == true){
-            lv_obj_set_style_bg_color(guider_ui.main_locker2, lv_color_hex(0xFF0000), 0);
-        }
-        else{
-            lv_obj_set_style_bg_color(guider_ui.main_locker2, lv_color_hex(0x00FF00), 0);
-        }
-
-        if (lockers[2].is_locked == true){
-            lv_obj_set_style_bg_color(guider_ui.main_locker3, lv_color_hex(0xFF0000), 0);
-        }
-        else{
-            lv_obj_set_style_bg_color(guider_ui.main_locker3, lv_color_hex(0x00FF00), 0);
-        }
-
-        if (lockers[3].is_locked == true){
-            lv_obj_set_style_bg_color(guider_ui.main_locker4, lv_color_hex(0xFF0000), 0);
-        }
-        else{
-            lv_obj_set_style_bg_color(guider_ui.main_locker4, lv_color_hex(0x00FF00), 0);
-        }
-
-        vTaskDelay(pdMS_TO_TICKS(1000)); // 每秒检查一次
+        vTaskDelay(pdMS_TO_TICKS(2000)); // 每 2 秒检查一次，减少 CPU 占用
     }
 }
+
 // ------------------------------------------------------------------------------------
 void app_main(void){
     esp_err_t ret = nvs_flash_init();
@@ -232,7 +335,6 @@ void app_main(void){
         ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
-
     //----------------------------------------------------------------------------------------------------------
     serve_init();
     //---------------------------------------------------------------------------------------------------------
@@ -263,6 +365,8 @@ void app_main(void){
     }
     // 初始化 XST
     xst_init(xst_note_cb);
+    vTaskDelay(pdMS_TO_TICKS(500));
+    power_on_locker_xst_sync();
 
     buzzer_device_t* buzzer_dev = buzzer_create_gpio_device(
         0, // device_id
@@ -293,9 +397,9 @@ void app_main(void){
 
     /* 创建 LVGL 任务 */
     xTaskCreatePinnedToCore(
-        lvgl_demo_task,
-        "lvgl_demo_task",
-        10240,
+        lvgl_task,
+        "lvgl_task",
+        20480,
         NULL,
         5, /* 优先级 */
         NULL,

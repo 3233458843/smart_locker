@@ -18,6 +18,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "esp_err.h"
 #include "freertos/FREERTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
@@ -31,6 +32,31 @@ extern "C" {
 /* Exported macros -----------------------------------------------------------*/
 
 /* Exported types ------------------------------------------------------------*/
+typedef enum {
+    SERVE_FLOW_IDLE = 0,
+    SERVE_FLOW_PENDING,
+    SERVE_FLOW_RUNNING,
+    SERVE_FLOW_SUCCESS,
+    SERVE_FLOW_FAILED,
+} serve_flow_state_t;
+
+typedef struct {
+    serve_flow_state_t state;
+    uint8_t locker_id;
+    uint8_t password[4];
+    bool has_password;
+    uint16_t user_id;
+    esp_err_t err;
+    char message[64];
+} serve_save_status_t;
+
+typedef struct {
+    serve_flow_state_t state;
+    uint8_t locker_id;
+    uint16_t user_id;
+    esp_err_t err;
+    char message[64];
+} serve_take_status_t;
 
 /* Exported variables --------------------------------------------------------*/
 extern SemaphoreHandle_t ready_save  ; // 通知能够进行存件
@@ -43,6 +69,13 @@ extern uint16_t user_num[128] ; //
 /* Exported functions --------------------------------------------------------*/
 void serve_init(void);
 void serve_main(void);
+
+bool serve_request_save(void);
+bool serve_request_take_by_palm(void);
+bool serve_request_take_by_password(const uint8_t password[4]);
+bool serve_request_debug_verify(void);
+void serve_get_save_status(serve_save_status_t *out);
+void serve_get_take_status(serve_take_status_t *out);
 /* C++  ------------------------------------------------------------*/
 #ifdef __cplusplus
 }

@@ -21,7 +21,7 @@
 /* SPI 配置 */
 #define DISPLAY_SPI_HOST    SPI2_HOST
 
-#define DISPLAY_CLOCK_HZ    (40 * 1000 * 1000)
+#define DISPLAY_CLOCK_HZ    (10 * 1000 * 1000)
 
 /* ============ API接口 ============ */
 

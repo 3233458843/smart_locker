@@ -305,6 +305,23 @@ esp_err_t locker_db_get_entry_by_locker(uint8_t locker_id, user_locker_entry_t* 
 }
 
 /**
+ * 按 4 位密码查找有效绑定条目
+ */
+esp_err_t locker_db_get_entry_by_password(const uint8_t password[4], user_locker_entry_t* entry){
+    if(password == NULL || entry == NULL){
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    for(int i = 0; i < 4; i++){
+        if(user_locker_db[i].is_valid && memcmp(user_locker_db[i].password, password, 4) == 0){
+            memcpy(entry, &user_locker_db[i], sizeof(user_locker_entry_t));
+            return ESP_OK;
+        }
+    }
+    return ESP_ERR_NOT_FOUND;
+}
+
+/**
  * 按柜号清除绑定条目
  */
 esp_err_t locker_db_remove_entry_by_locker(uint8_t locker_id){
@@ -319,6 +336,76 @@ esp_err_t locker_db_remove_entry_by_locker(uint8_t locker_id){
     lockers[locker_id].locker_info.locker_user_info_id[1] = 0;
 
     return locker_db_save_to_nvs();
+}
+
+/**
+ * 清空全部本地柜号绑定，用于 XST 用户库为空时的上电同步
+ */
+esp_err_t locker_db_clear_all(void){
+    memset(user_locker_db, 0, sizeof(user_locker_db));
+    for (int i = 0; i < 4; i++){
+        lockers[i].have_saved = false;
+        memset(lockers[i].password, 0, sizeof(lockers[i].password));
+        lockers[i].locker_info.locker_user_info_id[0] = 0;
+        lockers[i].locker_info.locker_user_info_id[1] = 0;
+    }
+
+    nvs_handle_t nvs_h;
+    esp_err_t err = nvs_open("locker", NVS_READWRITE, &nvs_h);
+    if (err == ESP_OK){
+        err = nvs_erase_all(nvs_h);
+        if (err == ESP_OK){
+            err = nvs_commit(nvs_h);
+        }
+        nvs_close(nvs_h);
+    }
+
+    ESP_LOGI(TAG, "Local locker database cleared");
+    return err;
+}
+
+/**
+ * 上电同步本地储物信息：本地绑定只保留仍存在于 XST 模组用户库中的用户
+ */
+esp_err_t locker_db_sync_with_xst_users(const uint16_t* xst_user_ids, uint16_t xst_user_count){
+    if (xst_user_count == 0){
+        ESP_LOGI(TAG, "Power-on sync: XST user list is empty, clearing all local locker bindings");
+        return locker_db_clear_all();
+    }
+    if (xst_user_ids == NULL){
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    esp_err_t first_err = ESP_OK;
+    for (int i = 0; i < 4; i++){
+        if (!user_locker_db[i].is_valid){
+            lockers[i].have_saved = false;
+            continue;
+        }
+
+        bool user_exists_in_xst = false;
+        for (uint16_t j = 0; j < xst_user_count; j++){
+            if (user_locker_db[i].user_id == xst_user_ids[j]){
+                user_exists_in_xst = true;
+                break;
+            }
+        }
+
+        if (!user_exists_in_xst){
+            ESP_LOGW(TAG, "Power-on sync: clearing stale local binding locker=%d user_id=%u",
+                     i + 1,
+                     (unsigned int)user_locker_db[i].user_id);
+            esp_err_t err = locker_db_remove_entry_by_locker((uint8_t)i);
+            if (err != ESP_OK && first_err == ESP_OK){
+                first_err = err;
+            }
+        }
+        else{
+            lockers[i].have_saved = true;
+        }
+    }
+
+    return first_err;
 }
 
 /**

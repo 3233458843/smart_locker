@@ -27,12 +27,6 @@
 // 静态变量保存当前取件输入的密码
 static char take_input_pwd[5] = "";
 static uint8_t take_pwd_len = 0;
-
-// 这里设置用户的取件密码，测试先写死为 "0000"
-#ifndef TAKE_PWD_DEF
-#define TAKE_PWD_DEF
-const char * take_correct_pwd = "0000";
-#endif
 #include <string.h>
 #include <stdio.h>
 
@@ -68,10 +62,10 @@ static void main_btn_1_event_handler (lv_event_t *e)
     {
         ui_load_scr_animation(&guider_ui, &guider_ui.save_page, guider_ui.save_page_del, &guider_ui.main_del, setup_scr_save_page, LV_SCR_LOAD_ANIM_NONE, 100, 100, true, true);
 
-        // 发送存件信号量
-        if (ready_save != NULL){
-            xSemaphoreGive(ready_save);
-            ESP_LOGI( "EVENT", "Sent ready_save signal");
+        if (serve_request_save()){
+            ESP_LOGI("EVENT", "Requested save flow");
+        } else {
+            ESP_LOGW("EVENT", "Save flow request rejected");
         }
         break;
     }
@@ -87,10 +81,10 @@ static void main_btn_2_event_handler (lv_event_t *e)
     case LV_EVENT_CLICKED:
     {
         ui_load_scr_animation(&guider_ui, &guider_ui.take_page, guider_ui.take_page_del, &guider_ui.main_del, setup_scr_take_page, LV_SCR_LOAD_ANIM_NONE, 100, 100, true, true);
-        // 发送取件信号量
-        if (ready_take != NULL){
-            xSemaphoreGive(ready_take);
-            ESP_LOGI("EVENT", "Sent ready_take signal");
+        if (serve_request_take_by_palm()){
+            ESP_LOGI("EVENT", "Requested palm take flow");
+        } else {
+            ESP_LOGW("EVENT", "Palm take flow request rejected");
         }
         break;
     }
@@ -227,16 +221,19 @@ static void take_page_btnm_1_event_handler (lv_event_t *e)
         else if(strcmp(my_txt, "V") == 0 || strcmp(my_txt, "v") == 0) {
             // 【确认键】
             if(take_pwd_len == 4) {
-                if(strcmp(take_input_pwd, take_correct_pwd) == 0) {
+                uint8_t password[4] = {
+                    (uint8_t)(take_input_pwd[0] - '0'),
+                    (uint8_t)(take_input_pwd[1] - '0'),
+                    (uint8_t)(take_input_pwd[2] - '0'),
+                    (uint8_t)(take_input_pwd[3] - '0'),
+                };
 
-                    // ✅ 密码正确，执行开柜！
+                if(serve_request_take_by_password(password)) {
+                    serve_take_status_t take_status = {0};
+                    serve_get_take_status(&take_status);
                     printf("Take Password Correct!\n");
-                    lv_label_set_text(ui->take_page_label_2, "密码正确！柜门已开");
-
-                    // TODO: 未来在这里调用开柜函数，或者弹出一个“取件成功”的提示框
-
+                    lv_label_set_text_fmt(ui->take_page_label_2, "密码正确！%d号柜已开", take_status.locker_id + 1);
                 } else {
-                    // ❌ 密码错误
                     lv_label_set_text(ui->take_page_label_2, "密码错误，请重试！");
                 }
 
@@ -503,8 +500,11 @@ static void setting_page_VERI_event_handler (lv_event_t *e)
     case LV_EVENT_CLICKED:
     {
         lv_label_set_text(guider_ui.setting_page_NOTE, "模组开始识别");
-        xSemaphoreGive(verify_debug);
-        ESP_LOGI ("EVENT", "已发送识别测试信号量");
+        if (serve_request_debug_verify()){
+            ESP_LOGI("EVENT", "Requested debug verify flow");
+        } else {
+            ESP_LOGW("EVENT", "Debug verify flow request rejected");
+        }
         break;
     }
     default:
