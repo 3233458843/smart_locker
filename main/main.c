@@ -30,6 +30,8 @@
 static esp_timer_handle_t lvgl_tick_timer = NULL;
 static bool g_locker_status_shown[4] = {false, false, false, false};
 static lv_obj_t* g_locker_status_bound_main = NULL;
+uint8_t g_xst_palm_progress = 0;
+bool g_palm_progress_updated = false;
 
 static void main_locker_status_cache_reset(void){
     for (uint8_t i = 0; i < 4; i++){
@@ -171,11 +173,51 @@ static void lvgl_task(void* arg){
     ESP_LOGI(TAG, "LVGL started");
 
     TickType_t last_status_refresh = xTaskGetTickCount();
+    uint8_t last_palm_progress = 0;
+    uint8_t last_save_progress = 0;
     while (1){
         TickType_t now = xTaskGetTickCount();
         if ((now - last_status_refresh) >= pdMS_TO_TICKS(1000)){
             main_locker_status_update_task();
             last_status_refresh = now;
+        }
+
+        // 实时更新识别/录取进度显示
+        if (lv_screen_active() == guider_ui.take_page) {
+            if (main_locker_status_widget_is_valid(guider_ui.take_page_cont_1) &&
+                !lv_obj_has_flag(guider_ui.take_page_cont_1, LV_OBJ_FLAG_HIDDEN)) {
+                if (g_xst_palm_progress != last_palm_progress || g_palm_progress_updated) {
+                    if (main_locker_status_widget_is_valid(guider_ui.take_page_label_1)){
+                        char buf[100];
+                        snprintf(buf, sizeof(buf), "请将手掌置于传感器前方10cm左右\n正在识别中... %d%%", g_xst_palm_progress);
+                        lv_label_set_text(guider_ui.take_page_label_1, buf);
+                    }
+                    last_palm_progress = g_xst_palm_progress;
+                    g_palm_progress_updated = false;
+                }
+            }
+        } else if (lv_screen_active() == guider_ui.save_page) {
+            // 存件页面：掌纹录取进度
+            serve_save_status_t save_st;
+            serve_get_save_status(&save_st);
+            if (save_st.state == SERVE_FLOW_RUNNING || save_st.state == SERVE_FLOW_PENDING) {
+                if (g_xst_palm_progress != last_save_progress || g_palm_progress_updated) {
+                    if (main_locker_status_widget_is_valid(guider_ui.save_page_bar_1)){
+                        lv_bar_set_value(guider_ui.save_page_bar_1, g_xst_palm_progress, LV_ANIM_ON);
+                    }
+                    char pct[8];
+                    snprintf(pct, sizeof(pct), "%d%%", g_xst_palm_progress);
+                    if (main_locker_status_widget_is_valid(guider_ui.save_page_label_2)){
+                        lv_label_set_text(guider_ui.save_page_label_2, pct);
+                    }
+                    last_save_progress = g_xst_palm_progress;
+                    g_palm_progress_updated = false;
+                }
+            }
+        } else {
+            // 离开取件/存件页面时重置进度
+            last_palm_progress = 0;
+            last_save_progress = 0;
         }
 
         lv_task_handler(); // LVGL 任务管理
@@ -191,7 +233,13 @@ void xst_note_cb(uint8_t nid, uint8_t* data, uint16_t len){
         ESP_LOGI(TAG, "掌静脉模块已准备就绪！可以开始识别了。");
         break;
     case NID_PALM_STATE:
-        ESP_LOGI(TAG, "掌静脉状态更新 (靠近/移开等)...");
+        if (len > 0) {
+            g_xst_palm_progress = data[0];
+            g_palm_progress_updated = true;
+            ESP_LOGI(TAG, "掌静脉状态更新: 进度 = %d", g_xst_palm_progress);
+        } else {
+            ESP_LOGI(TAG, "掌静脉状态更新 (无数据)...");
+        }
         break;
     case NID_UNKNOWNERROR:
         ESP_LOGE(TAG, "掌静脉硬件发生异常！");
@@ -383,11 +431,11 @@ void app_main(void){
 
     ESP_ERROR_CHECK(buzzer_init());
 
-    buzzer_handle_t buzzer_handle = buzzer_get_handle(0);
+    g_buzzer_handle = buzzer_get_handle(0);
 
-    if (buzzer_handle != NULL){
+    if (g_buzzer_handle != NULL){
         ESP_LOGI(TAG, "Buzzer device initialized successfully");
-        buzzer_beep_pattern(buzzer_handle, BUZZER_BEEP_SHORT);
+        buzzer_beep_pattern(g_buzzer_handle, BUZZER_BEEP_SHORT);
     }
 
     // 初始化 WiFi

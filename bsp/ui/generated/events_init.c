@@ -24,6 +24,9 @@
 #include "locker/locker.h"
 #include "serve.h"
 
+extern uint8_t g_xst_palm_progress;
+extern bool g_palm_progress_updated;
+
 // 静态变量保存当前取件输入的密码
 static char take_input_pwd[5] = "";
 static uint8_t take_pwd_len = 0;
@@ -134,6 +137,9 @@ static void take_page_event_handler (lv_event_t *e)
 
         // 2. 复位提示词
         lv_label_set_text(ui->take_page_label_2, "请输入密码");
+        g_xst_palm_progress = 0;
+        g_palm_progress_updated = false;
+
 
         // 3. 把你那 4 个数字框强制变成下划线
         lv_label_set_text(ui->take_page_label_3, "_");
@@ -315,7 +321,23 @@ static void save_page_event_handler (lv_event_t *e)
     switch (code) {
     case LV_EVENT_SCREEN_LOADED:
     {
+        lv_ui * ui = &guider_ui;
 
+        // 重置进度条 (缩短动画时长以实时响应进度变化)
+        lv_obj_set_style_anim_duration(ui->save_page_bar_1, 100, 0);
+        lv_bar_set_value(ui->save_page_bar_1, 0, LV_ANIM_OFF);
+
+        // 重置百分比标签并移到进度条右侧
+        lv_label_set_text(ui->save_page_label_2, "0%");
+        lv_obj_set_pos(ui->save_page_label_2, 205, 50);
+        lv_obj_set_size(ui->save_page_label_2, 40, 20);
+
+        // 重置主提示文案
+        lv_label_set_text(ui->save_page_label_1, "将手掌悬停于传感器前10cm左右\n等待设备发出滴0.声，柜门即可弹开");
+
+        // 重置掌纹进度全局变量
+        g_xst_palm_progress = 0;
+        g_palm_progress_updated = false;
         break;
     }
     default:

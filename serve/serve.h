@@ -24,6 +24,10 @@
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
 
+/* Type forward declarations -------------------------------------------------*/
+struct buzzer_handle_s;
+typedef struct buzzer_handle_s *buzzer_handle_t;
+
 /* C++ ------------------------------------------------------------*/
 #ifdef __cplusplus
 extern "C" {
@@ -64,6 +68,8 @@ extern SemaphoreHandle_t ready_take  ; // 通知能够进行取件
 extern SemaphoreHandle_t verify_debug  ; // 测试识别指令
 
 extern  QueueHandle_t save_verify_process ;
+
+extern buzzer_handle_t g_buzzer_handle; // 蜂鸣器句柄，由 main.c 赋值
 
 extern uint16_t user_num[128] ; //
 /* Exported functions --------------------------------------------------------*/

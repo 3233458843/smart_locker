@@ -10,6 +10,11 @@
 #include "lwip/sockets.h"
 
 int g_vofa_client_fd = -1;
+
+// 掌纹进度全局变量（由 main.c 定义，供 UI 实时显示）
+extern uint8_t g_xst_palm_progress;
+extern bool g_palm_progress_updated;
+
 // ---------------- 核心通信与任务同步资源 ----------------
 // 内部使用的命令回复队列 (供业务API阻塞等待结果)
 static QueueHandle_t xst_reply_queue = NULL;
@@ -495,7 +500,14 @@ static xst_result_t xst_exec_cmd(uint8_t cmd, uint8_t* tx_data, uint16_t tx_len,
         ESP_LOGI(XST_TAG, "=> [xst_exec_cmd] 收到回复, body->mid=0x%02X, 期望cmd=0x%02X", body->mid, cmd);
 
         if (body->mid != cmd){
-            ESP_LOGW(XST_TAG, "=> [xst_exec_cmd] 命令ID不匹配! 丢弃此回复并继续等待目标命令回复");
+            // ENROLL_PROGRESS 回复：提取进度值供 UI 实时显示
+            if (body->mid == MID_ENROLL_PROGRESS && item.len >= 3){
+                g_xst_palm_progress = body->payload[0];
+                g_palm_progress_updated = true;
+                ESP_LOGI(XST_TAG, "=> [xst_exec_cmd] 录取进度更新: %d%%", g_xst_palm_progress);
+            } else {
+                ESP_LOGW(XST_TAG, "=> [xst_exec_cmd] 命令ID不匹配! 丢弃此回复并继续等待目标命令回复");
+            }
             free(item.data);
             continue;
         }

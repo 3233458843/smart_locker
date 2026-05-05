@@ -22,6 +22,8 @@
 
 #include "xst.h"
 #include "locker.h"
+#include "buzzer.h"
+#include "lwip/sockets.h"
 
 /* Private macros ------------------------------------------------------------*/
 #define SERVE_TAG "serve"
@@ -53,6 +55,10 @@ static serve_take_status_t g_take_status = {
     .err = ESP_OK,
     .message = "idle",
 };
+
+
+
+buzzer_handle_t g_buzzer_handle = NULL; // 蜂鸣器句柄，由 main.c 初始化后赋值
 
 static void serve_save_status_reset(const char* message){
     g_save_status.state = SERVE_FLOW_IDLE;
@@ -144,12 +150,14 @@ bool serve_request_take_by_password(const uint8_t password[4]){
     esp_err_t db_err = locker_db_get_entry_by_password(password, &locker_entry);
     if (db_err != ESP_OK){
         ESP_LOGW(SERVE_TAG, "No locker binding found for input password");
+        if (g_buzzer_handle) buzzer_beep_pattern(g_buzzer_handle, BUZZER_BEEP_ERROR);
         serve_take_status_set(SERVE_FLOW_FAILED, 0xFF, 0, db_err, "Password not found");
         return false;
     }
 
     if (locker_entry.locker_id >= 4){
         ESP_LOGE(SERVE_TAG, "Invalid locker_id=%u for password take", locker_entry.locker_id);
+        if (g_buzzer_handle) buzzer_beep_pattern(g_buzzer_handle, BUZZER_BEEP_ERROR);
         serve_take_status_set(SERVE_FLOW_FAILED, locker_entry.locker_id, locker_entry.user_id, ESP_ERR_INVALID_STATE,
                               "Invalid locker id");
         return false;
@@ -159,6 +167,7 @@ bool serve_request_take_by_password(const uint8_t password[4]){
              locker_entry.user_id,
              locker_entry.locker_id + 1);
     locker_on(&lockers[locker_entry.locker_id]);
+    if (g_buzzer_handle) buzzer_beep_pattern(g_buzzer_handle, BUZZER_BEEP_SUCCESS);
 
     xst_result_t del_res = xst_cmd_del_user(locker_entry.user_id);
     if (del_res != MR_SUCCESS){
@@ -172,6 +181,7 @@ bool serve_request_take_by_password(const uint8_t password[4]){
         ESP_LOGE(SERVE_TAG, "Locker opened but failed to clear locker %u binding: %s",
                  locker_entry.locker_id + 1,
                  esp_err_to_name(db_err));
+        if (g_buzzer_handle) buzzer_beep_pattern(g_buzzer_handle, BUZZER_BEEP_ERROR);
         serve_take_status_set(SERVE_FLOW_FAILED, locker_entry.locker_id, locker_entry.user_id, db_err,
                               "Failed to clear binding");
         return false;
@@ -189,14 +199,14 @@ bool serve_request_debug_verify(void){
     return xSemaphoreGive(verify_debug) == pdTRUE;
 }
 
-void serve_get_save_status(serve_save_status_t* out){
+void serve_get_save_status(serve_save_status_t *out){
     if (out == NULL){
         return;
     }
     memcpy(out, &g_save_status, sizeof(*out));
 }
 
-void serve_get_take_status(serve_take_status_t* out){
+void serve_get_take_status(serve_take_status_t *out){
     if (out == NULL){
         return;
     }
@@ -217,6 +227,7 @@ void ready_take_task(void* param){
             xst_result_t verify_res = xst_cmd_verify(10, &verified_user_id, verified_name);
             if (verify_res != MR_SUCCESS){
                 ESP_LOGE(SERVE_TAG, "Failed to verify user, res=%d", verify_res);
+                if (g_buzzer_handle) buzzer_beep_pattern(g_buzzer_handle, BUZZER_BEEP_ERROR);
                 serve_take_status_set(SERVE_FLOW_FAILED, 0xFF, 0, ESP_FAIL, "Palm verify failed");
                 continue;
             }
@@ -224,12 +235,14 @@ void ready_take_task(void* param){
             esp_err_t db_err = locker_db_get_entry_by_user(verified_user_id, &locker_entry);
             if (db_err != ESP_OK){
                 ESP_LOGW(SERVE_TAG, "No locker binding found for user_id=%u", verified_user_id);
+                if (g_buzzer_handle) buzzer_beep_pattern(g_buzzer_handle, BUZZER_BEEP_ERROR);
                 serve_take_status_set(SERVE_FLOW_FAILED, 0xFF, verified_user_id, db_err, "No locker binding found");
                 continue;
             }
 
             if (locker_entry.locker_id >= 4){
                 ESP_LOGE(SERVE_TAG, "Invalid locker_id=%u for user_id=%u", locker_entry.locker_id, verified_user_id);
+                if (g_buzzer_handle) buzzer_beep_pattern(g_buzzer_handle, BUZZER_BEEP_ERROR);
                 serve_take_status_set(SERVE_FLOW_FAILED, locker_entry.locker_id, verified_user_id,
                                       ESP_ERR_INVALID_STATE, "Invalid locker id");
                 continue;
@@ -240,7 +253,7 @@ void ready_take_task(void* param){
                      verified_name,
                      locker_entry.locker_id + 1);
             locker_on(&lockers[locker_entry.locker_id]);
-
+            if (g_buzzer_handle) buzzer_beep_pattern(g_buzzer_handle, BUZZER_BEEP_SUCCESS);
 
             xst_result_t del_res = xst_cmd_del_user(verified_user_id);
             if (del_res != MR_SUCCESS){
@@ -254,6 +267,7 @@ void ready_take_task(void* param){
                 ESP_LOGE(SERVE_TAG, "Locker opened and XST user deleted, but failed to clear locker %u binding: %s",
                          locker_entry.locker_id + 1,
                          esp_err_to_name(db_err));
+                if (g_buzzer_handle) buzzer_beep_pattern(g_buzzer_handle, BUZZER_BEEP_ERROR);
                 serve_take_status_set(SERVE_FLOW_FAILED, locker_entry.locker_id, verified_user_id, db_err,
                                       "Failed to clear binding");
                 continue;
@@ -284,6 +298,7 @@ void ready_save_task(void* param){
             uint8_t locker_id = locker_db_find_free_locker();
             if (locker_id >= 4){
                 ESP_LOGW(SERVE_TAG, "No free locker available for save flow");
+                if (g_buzzer_handle) buzzer_beep_pattern(g_buzzer_handle, BUZZER_BEEP_ERROR);
                 serve_save_status_fail(ESP_ERR_NOT_FOUND, "No free locker available");
                 continue;
             }
@@ -310,6 +325,7 @@ void ready_save_task(void* param){
                              target_locker->locker_id + 1,
                              new_user_id);
                     target_locker->have_saved = true;
+                    if (g_buzzer_handle) buzzer_beep_pattern(g_buzzer_handle, BUZZER_BEEP_SHORT);
                     break;
                 }
 
@@ -324,6 +340,7 @@ void ready_save_task(void* param){
                 ESP_LOGE(SERVE_TAG, "Failed to enroll user for locker %d after 3 attempts, res=%d",
                          target_locker->locker_id + 1,
                          enroll_res);
+                if (g_buzzer_handle) buzzer_beep_pattern(g_buzzer_handle, BUZZER_BEEP_ERROR);
                 serve_save_status_fail(ESP_FAIL, "Failed to enroll user (timeout)");
                 target_locker->have_saved = false;
                 continue;
@@ -347,6 +364,7 @@ void ready_save_task(void* param){
                 ESP_LOGE(SERVE_TAG, "Failed to save locker binding for locker %d: %s",
                          target_locker->locker_id + 1,
                          esp_err_to_name(db_err));
+                if (g_buzzer_handle) buzzer_beep_pattern(g_buzzer_handle, BUZZER_BEEP_ERROR);
                 serve_save_status_fail(db_err, "Failed to persist binding");
                 xst_cmd_del_user(new_user_id);
                 continue;
@@ -367,6 +385,7 @@ void ready_save_task(void* param){
 
             vTaskDelay(pdMS_TO_TICKS(1000));
             locker_on(target_locker);
+            if (g_buzzer_handle) buzzer_beep_pattern(g_buzzer_handle, BUZZER_BEEP_SUCCESS);
             g_save_status.state = SERVE_FLOW_SUCCESS;
             g_save_status.err = ESP_OK;
             strncpy(g_save_status.message, "save flow completed", sizeof(g_save_status.message) - 1);

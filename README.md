@@ -9,7 +9,7 @@
 - **掌静脉识别**：`bsp/XST` 提供完整 UART 协议接口（初始化、录入、删除、验证、状态查询）。
 - **储物柜物品检测**：独立的 `have_saved` 标志与门开关状态解耦，准确判断物品存放情况。
 - **存/取业务流程**：通过信号量驱动的异步任务，支持掌静脉识别、自动柜号分配、密码生成、NVS 持久化存储。
-- **蜂鸣器驱动**：支持外部设备注册、状态机管理、GPIO/PWM 实现切换的抽象设计。
+- **蜂鸣器驱动与反馈**：支持外部设备注册、状态机管理、GPIO/PWM 实现切换的抽象设计；业务全流程接入成功/错误提示音。
 - **实时状态同步**：专用任务每秒轮询柜门传感器，自动更新 UI 显示。
 - **NVS 数据持久化**：用户-柜号-密码绑定数据跨电源周期保持，支持快速恢复。
 
@@ -21,9 +21,12 @@
 
 ### 业务服务层（`serve/`）
 - `serve.c`：中间层解耦 UI 与硬件控制，通过信号量接收 UI 事件并驱动业务流程。
+- **状态管理**：`serve_save_status_t` / `serve_take_status_t` 记录完整流程状态，UI 通过 `serve_get_save_status()` / `serve_get_take_status()` 查询。
+- **请求接口**：`serve_request_save()` / `serve_request_take_by_palm()` / `serve_request_take_by_password()` — UI 通过统一 API 发起业务，不直接操作信号量。
+- **蜂鸣器反馈**：所有业务节点（成功/失败/错误）均接入 `buzzer_beep_pattern()` 提示音。
 - `ready_save_task`：
   - 遍历 4 个柜位查找空闲柜
-  - 调用 `xst_cmd_enroll_single()` 录入新用户
+  - 调用 `xst_cmd_enroll_single()` 录入新用户（失败自动重试 3 次）
   - 自动分配柜号、生成随机 4 位密码
   - 打开柜门让用户放入物品
   - 数据保存到 NVS
@@ -280,7 +283,11 @@ cd E:\esp_code\smart_locker
 
 ### 蜂鸣器反馈
 - 系统启动时：短鸣 1 次（`BUZZER_BEEP_SHORT`）
-- 用户操作时：可根据需要调用 `buzzer_beep_pattern()` 增加音频反馈（待完善）
+- 存件/取件流程各节点均已接入音频提示：
+  - 掌纹录入成功 → `BUZZER_BEEP_SHORT`
+  - 掌纹验证成功/密码正确开柜 → `BUZZER_BEEP_SUCCESS`（连响 3 次）
+  - 流程失败/错误 → `BUZZER_BEEP_ERROR`
+- 蜂鸣器句柄全局共享，serve 层通过 `g_buzzer_handle` 直接调用
 
 ### NVS 数据持久化
 **命名空间**：`"locker"`  
@@ -348,6 +355,10 @@ void my_async_task(void* param) {
   - [x] 取件流程（密码）：4位密码输入 → NVS查询 → 开柜 → 数据清除
   - [x] 物品存放检测（独立于门状态）
   - [x] 柜门状态实时监控
+  - [x] 存/取流程蜂鸣器提示音（成功/失败/错误）
+  - [x] 掌纹实时进度显示（取件页识别进度 + 存件页录取进度条与百分比）
+  - [x] 统一业务请求接口（serve_request_*），UI 不直接操作信号量
+  - [x] ENROLL_PROGRESS 帧解析与进度值实时提取
 
 - [x] **XST 管理员接口**
   - [x] 模组复位（RES 按钮）
@@ -364,19 +375,19 @@ void my_async_task(void* param) {
   - [x] FreeRTOS 多任务架构（LVGL、业务、状态监控）
   - [x] 信号量驱动的异步业务流程
   - [x] WiFi AP + TCP 调试透传
-  - [x] 实时 UI 状态更新
+  - [x] 实时 UI 状态更新（主页柜体颜色 + 取件/存件进度条）
   - [x] 密码取件界面（4位密码输入键盘）
   - [x] 管理员 Setting 页面（密码保护）
+  - [x] 业务层状态管理（serve_save_status_t / serve_take_status_t）
+  - [x] 蜂鸣器全流程音频反馈
 
 ### 🔄 进行中功能
+- [ ] **系统稳定性优化**：LVGL 控件悬空指针保护、看门狗超时排查
+- [ ] **XST 数据库运行时同步**：检测 XST 与本地 NVS 不一致时自动修复
 - [ ] **OTA 升级**：预留分区，实现固件远程更新
-- [ ] **多语言支持**：中英文切换
-- [ ] **日志系统**：记录存/取操作时间戳与用户信息
-- [ ] **故障诊断**：传感器/执行器自检
 
 ### ⏳ 计划中功能
 - [ ] **远程控制**：手机端完整存/取件控制与密码推送
-- [ ] **OTA 升级**：预留分区，实现固件远程更新
 - [ ] **多语言支持**：中英文切换
 - [ ] **管理员认证**：密码/指纹保护 Setting 页面
 - [ ] **日志系统**：记录存/取操作时间戳与用户信息
@@ -413,6 +424,38 @@ void my_async_task(void* param) {
 - [ESP32-S3 芯片规格书](https://www.espressif.com/sites/default/files/documentation/esp32-s3_datasheet_cn.pdf)
 
 ## 🐛 修复历史
+
+### 2026-05-05 版本：蜂鸣器反馈 + 录取进度 + 稳定性修复
+**新增功能**：
+1. 蜂鸣器全流程提示音
+   - 存件/取件/密码取件各节点接入成功/错误蜂鸣
+   - 全局 `g_buzzer_handle` 共享，serve 层直接调用
+
+2. 存件页掌纹录取实时进度
+   - 实时进度条 (`save_page_bar_1`) + 百分比标签 (`save_page_label_2`)
+   - 修复 `xst_exec_cmd()` 丢弃 `ENROLL_PROGRESS` (0x14) 帧的问题，提取进度值供 UI 显示
+
+3. 统一业务请求接口重构
+   - `serve_request_save()` / `serve_request_take_by_palm()` / `serve_request_take_by_password()`
+   - UI 不再直接操作信号量
+   - 完整状态机：`SERVE_FLOW_IDLE → PENDING → RUNNING → SUCCESS/FAILED`
+
+**问题修复**：
+1. Guru Meditation (LoadProhibited) 崩溃
+   - 原因：`init_scr_del_flag` 使每次导航重建控件，旧屏幕删除后 `guider_ui` 指针悬空
+   - 修复：所有 LVGL 控件访问加 `lv_obj_is_valid()` 保护
+
+2. 存件页中文乱码
+   - 原因：自定义字体 `Lemi_Little_Milk_Foam_Font_16` 不包含"正、在、录、入"等字符
+   - 修复：只更新 `save_page_bar_1` 和 `save_page_label_2`（标准字体），不动主文案
+
+**编译结果**：✅ 成功  
+**文件修改**：
+- `bsp/XST/xst.c`：ENROLL_PROGRESS 帧解析、进度全局变量 extern
+- `serve/serve.c` / `serve/serve.h`：buzzer 集成、请求 API、状态管理
+- `serve/CMakeLists.txt`：添加 buzzer 依赖
+- `main/main.c`：lvgl_task 实时进度 + 控件有效保护
+- `bsp/ui/generated/events_init.c`：存件页 SCREEN_LOADED 重置进度 UI
 
 ### 2026-04-26 版本：关键性能修复
 **问题**：
