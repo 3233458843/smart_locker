@@ -31,7 +31,6 @@ void setup_scr_take_page(lv_ui *ui)
     lv_obj_set_pos(ui->take_page_cont_1, 0, 0);
     lv_obj_set_size(ui->take_page_cont_1, 240, 320);
     lv_obj_set_scrollbar_mode(ui->take_page_cont_1, LV_SCROLLBAR_MODE_OFF);
-    lv_obj_add_flag(ui->take_page_cont_1, LV_OBJ_FLAG_HIDDEN);
 
     //Write style for take_page_cont_1, Part: LV_PART_MAIN, State: LV_STATE_DEFAULT.
     lv_obj_set_style_border_width(ui->take_page_cont_1, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
@@ -122,10 +121,10 @@ void setup_scr_take_page(lv_ui *ui)
 
     //Write codes take_page_btn_1
     ui->take_page_btn_1 = lv_button_create(ui->take_page_cont_1);
-    lv_obj_set_pos(ui->take_page_btn_1, 150, 10);
-    lv_obj_set_size(ui->take_page_btn_1, 80, 40);
+    lv_obj_set_pos(ui->take_page_btn_1, 135, 9);
+    lv_obj_set_size(ui->take_page_btn_1, 94, 40);
     ui->take_page_btn_1_label = lv_label_create(ui->take_page_btn_1);
-    lv_label_set_text(ui->take_page_btn_1_label, "密码开柜");
+    lv_label_set_text(ui->take_page_btn_1_label, "手机号开柜");
     lv_label_set_long_mode(ui->take_page_btn_1_label, LV_LABEL_LONG_WRAP);
     lv_obj_align(ui->take_page_btn_1_label, LV_ALIGN_CENTER, 0, 0);
     lv_obj_set_style_pad_all(ui->take_page_btn_1, 0, LV_STATE_DEFAULT);
@@ -148,6 +147,7 @@ void setup_scr_take_page(lv_ui *ui)
     lv_obj_set_pos(ui->take_page_cont_2, 0, 0);
     lv_obj_set_size(ui->take_page_cont_2, 240, 320);
     lv_obj_set_scrollbar_mode(ui->take_page_cont_2, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_add_flag(ui->take_page_cont_2, LV_OBJ_FLAG_HIDDEN);
 
     //Write style for take_page_cont_2, Part: LV_PART_MAIN, State: LV_STATE_DEFAULT.
     lv_obj_set_style_border_width(ui->take_page_cont_2, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
@@ -239,9 +239,9 @@ void setup_scr_take_page(lv_ui *ui)
 
     //Write codes take_page_label_2
     ui->take_page_label_2 = lv_label_create(ui->take_page_cont_2);
-    lv_obj_set_pos(ui->take_page_label_2, 64, 29);
-    lv_obj_set_size(ui->take_page_label_2, 168, 27);
-    lv_label_set_text(ui->take_page_label_2, "请输入4位密码正确！柜门已开错误，重试");
+    lv_obj_set_pos(ui->take_page_label_2, 58, 29);
+    lv_obj_set_size(ui->take_page_label_2, 178, 27);
+    lv_label_set_text(ui->take_page_label_2, "请输入4位手机号正确！柜门已开错误，重试");
     lv_label_set_long_mode(ui->take_page_label_2, LV_LABEL_LONG_WRAP);
 
     //Write style for take_page_label_2, Part: LV_PART_MAIN, State: LV_STATE_DEFAULT.

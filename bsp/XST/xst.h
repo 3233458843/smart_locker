@@ -17,8 +17,10 @@ extern int g_vofa_client_fd; // 声明全局 Socket 句柄
 #define XST_BAUD_RATE   115200 //XST串口波特率
 
 typedef void (*xst_note_callback_t)(uint8_t nid, uint8_t *data, uint16_t len);
+typedef void (*xst_progress_callback_t)(uint8_t progress);
 
 void xst_init(xst_note_callback_t callback);
+void xst_set_progress_callback(xst_progress_callback_t cb);
 
 xst_result_t xst_cmd_reset(void);
 xst_result_t xst_cmd_get_status(uint8_t *status);

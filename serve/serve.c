@@ -1,16 +1,8 @@
 /**
  * @file      serve.c
- * @brief     ${USER_PROMPT}
- * @author    Your Name (you@yourdomain.com)
- * @version   1.0
- * @date      2026-04-21
- * 
- * @copyright Copyright (c) 2026 All rights reserved.
- * 
- * @note      
+ * @brief     Business service layer
  */
 
-/* Includes ------------------------------------------------------------------*/
 #include "serve.h"
 
 #include "freertos/FREERTOS.h"
@@ -23,20 +15,14 @@
 #include "xst.h"
 #include "locker.h"
 #include "buzzer.h"
+#include "locker_actions.h"
 #include "lwip/sockets.h"
 
-/* Private macros ------------------------------------------------------------*/
 #define SERVE_TAG "serve"
-/* Private types -------------------------------------------------------------*/
 
 /* Private variables ---------------------------------------------------------*/
-SemaphoreHandle_t ready_save = NULL; // 通知能够进行存件
-SemaphoreHandle_t ready_take = NULL; // 通知能够进行取件
-SemaphoreHandle_t verify_debug = NULL; // debug通知能够进行取件
-
-QueueHandle_t save_verify_process = NULL; // 存件录取进度队列
-
-uint16_t user_num[128] = {0};
+static SemaphoreHandle_t ready_save = NULL;
+static SemaphoreHandle_t ready_take = NULL;
 
 static serve_save_status_t g_save_status = {
     .state = SERVE_FLOW_IDLE,
@@ -56,9 +42,7 @@ static serve_take_status_t g_take_status = {
     .message = "idle",
 };
 
-
-
-buzzer_handle_t g_buzzer_handle = NULL; // 蜂鸣器句柄，由 main.c 初始化后赋值
+buzzer_handle_t g_buzzer_handle = NULL;
 
 static void serve_save_status_reset(const char* message){
     g_save_status.state = SERVE_FLOW_IDLE;
@@ -89,51 +73,47 @@ static void serve_take_status_set(serve_flow_state_t state, uint8_t locker_id, u
 }
 
 /* Private function prototypes -----------------------------------------------*/
-void ready_take_task(void* param); // 等待取件任务
-void ready_save_task(void* param); // 等待存件任务
-void verify_debug_task(void* param); // 等待存件任务
-/* Exported functions --------------------------------------------------------*/
+void ready_take_task(void* param);
+void ready_save_task(void* param);
+
 void serve_init(void){
-    //业务通知信号量
     ready_save = xSemaphoreCreateBinary();
     ready_take = xSemaphoreCreateBinary();
-    verify_debug = xSemaphoreCreateBinary();
 
-    // 录取进度队列创建
-    save_verify_process = xQueueCreate(4, sizeof(uint16_t));
-
-    if (ready_save == NULL || ready_take == NULL || verify_debug == NULL){
+    if (ready_save == NULL || ready_take == NULL){
         ESP_LOGE(SERVE_TAG, "Failed to create semaphores");
         return;
     }
 
     xTaskCreatePinnedToCore(ready_take_task, "ready_take_task", 4096, NULL, 10, NULL, tskNO_AFFINITY);
     xTaskCreatePinnedToCore(ready_save_task, "ready_save_task", 4096, NULL, 10, NULL, tskNO_AFFINITY);
-    xTaskCreatePinnedToCore(verify_debug_task, "verify_debug_task", 4096, NULL, 10, NULL, tskNO_AFFINITY);
-}
-
-void serve_main(void){
 }
 
 bool serve_request_save(void){
-    if (ready_save == NULL){
-        return false;
-    }
-    if (g_save_status.state == SERVE_FLOW_PENDING || g_save_status.state == SERVE_FLOW_RUNNING){
-        return false;
-    }
+    if (ready_save == NULL) return false;
+    if (g_save_status.state == SERVE_FLOW_PENDING || g_save_status.state == SERVE_FLOW_RUNNING) return false;
 
     serve_save_status_reset("save requested");
     g_save_status.state = SERVE_FLOW_PENDING;
+    return xSemaphoreGive(ready_save) == pdTRUE;
+}
 
+static uint8_t g_pending_phone[4] = {0};
+static bool g_has_pending_phone = false;
 
+bool serve_request_save_with_phone(const uint8_t phone[4]){
+    if (phone == NULL || ready_save == NULL) return false;
+    if (g_save_status.state == SERVE_FLOW_PENDING || g_save_status.state == SERVE_FLOW_RUNNING) return false;
+
+    serve_save_status_reset("save requested with phone");
+    memcpy(g_pending_phone, phone, 4);
+    g_has_pending_phone = true;
+    g_save_status.state = SERVE_FLOW_PENDING;
     return xSemaphoreGive(ready_save) == pdTRUE;
 }
 
 bool serve_request_take_by_palm(void){
-    if (ready_take == NULL){
-        return false;
-    }
+    if (ready_take == NULL) return false;
     serve_take_status_set(SERVE_FLOW_PENDING, 0xFF, 0, ESP_OK, "palm take requested");
     return xSemaphoreGive(ready_take) == pdTRUE;
 }
@@ -158,59 +138,124 @@ bool serve_request_take_by_password(const uint8_t password[4]){
     if (locker_entry.locker_id >= 4){
         ESP_LOGE(SERVE_TAG, "Invalid locker_id=%u for password take", locker_entry.locker_id);
         if (g_buzzer_handle) buzzer_beep_pattern(g_buzzer_handle, BUZZER_BEEP_ERROR);
-        serve_take_status_set(SERVE_FLOW_FAILED, locker_entry.locker_id, locker_entry.user_id, ESP_ERR_INVALID_STATE,
-                              "Invalid locker id");
+        serve_take_status_set(SERVE_FLOW_FAILED, locker_entry.locker_id, locker_entry.user_id, ESP_ERR_INVALID_STATE, "Invalid locker id");
         return false;
     }
 
     ESP_LOGI(SERVE_TAG, "Password take success for user_id=%u, opening locker %u",
-             locker_entry.user_id,
-             locker_entry.locker_id + 1);
-    locker_on(&lockers[locker_entry.locker_id]);
-    if (g_buzzer_handle) buzzer_beep_pattern(g_buzzer_handle, BUZZER_BEEP_SUCCESS);
-
-    xst_result_t del_res = xst_cmd_del_user(locker_entry.user_id);
-    if (del_res != MR_SUCCESS){
-        ESP_LOGW(SERVE_TAG, "Locker opened but failed to delete user_id=%u from XST, res=%d",
-                 locker_entry.user_id,
-                 del_res);
-    }
-
-    db_err = locker_db_remove_entry_by_locker(locker_entry.locker_id);
-    if (db_err != ESP_OK){
-        ESP_LOGE(SERVE_TAG, "Locker opened but failed to clear locker %u binding: %s",
-                 locker_entry.locker_id + 1,
-                 esp_err_to_name(db_err));
-        if (g_buzzer_handle) buzzer_beep_pattern(g_buzzer_handle, BUZZER_BEEP_ERROR);
-        serve_take_status_set(SERVE_FLOW_FAILED, locker_entry.locker_id, locker_entry.user_id, db_err,
-                              "Failed to clear binding");
+             locker_entry.user_id, locker_entry.locker_id + 1);
+    esp_err_t release_err = serve_release_locker(locker_entry.locker_id, locker_entry.user_id);
+    if (release_err != ESP_OK){
+        serve_take_status_set(SERVE_FLOW_FAILED, locker_entry.locker_id, locker_entry.user_id, release_err, "Failed to clear binding");
         return false;
     }
 
-    serve_take_status_set(SERVE_FLOW_SUCCESS, locker_entry.locker_id, locker_entry.user_id, ESP_OK,
-                          "password take completed");
+    serve_take_status_set(SERVE_FLOW_SUCCESS, locker_entry.locker_id, locker_entry.user_id, ESP_OK, "password take completed");
+    return true;
+}
+
+bool serve_request_take_by_phone(const uint8_t phone[4]){
+    if (phone == NULL){
+        serve_take_status_set(SERVE_FLOW_FAILED, 0xFF, 0, ESP_ERR_INVALID_ARG, "Invalid phone input");
+        return false;
+    }
+
+    user_locker_entry_t locker_entry = {0};
+    serve_take_status_set(SERVE_FLOW_RUNNING, 0xFF, 0, ESP_OK, "phone take running");
+
+    esp_err_t db_err = locker_db_get_entry_by_phone(phone, &locker_entry);
+    if (db_err != ESP_OK){
+        ESP_LOGW(SERVE_TAG, "No locker binding found for input phone");
+        if (g_buzzer_handle) buzzer_beep_pattern(g_buzzer_handle, BUZZER_BEEP_ERROR);
+        serve_take_status_set(SERVE_FLOW_FAILED, 0xFF, 0, db_err, "Phone not found");
+        return false;
+    }
+
+    if (locker_entry.locker_id >= 4){
+        ESP_LOGE(SERVE_TAG, "Invalid locker_id=%u for phone take", locker_entry.locker_id);
+        if (g_buzzer_handle) buzzer_beep_pattern(g_buzzer_handle, BUZZER_BEEP_ERROR);
+        serve_take_status_set(SERVE_FLOW_FAILED, locker_entry.locker_id, locker_entry.user_id, ESP_ERR_INVALID_STATE, "Invalid locker id");
+        return false;
+    }
+
+    ESP_LOGI(SERVE_TAG, "Phone take success for user_id=%u, opening locker %u",
+             locker_entry.user_id, locker_entry.locker_id + 1);
+
+    // 直接开柜+清绑定，不调用 xst_cmd_del_user (避免与 ready_take_task 的 VERIFY 命令冲突)
+    locker_on(&lockers[locker_entry.locker_id]);
+    if (g_buzzer_handle) buzzer_beep_pattern(g_buzzer_handle, BUZZER_BEEP_SUCCESS);
+
+    esp_err_t release_err = locker_db_remove_entry_by_locker(locker_entry.locker_id);
+    if (release_err != ESP_OK){
+        ESP_LOGE(SERVE_TAG, "Phone take: failed to clear locker %u binding: %s",
+                 locker_entry.locker_id + 1, esp_err_to_name(release_err));
+        if (g_buzzer_handle) buzzer_beep_pattern(g_buzzer_handle, BUZZER_BEEP_ERROR);
+        serve_take_status_set(SERVE_FLOW_FAILED, locker_entry.locker_id, locker_entry.user_id, release_err, "Failed to clear binding");
+        return false;
+    }
+
+    serve_take_status_set(SERVE_FLOW_SUCCESS, locker_entry.locker_id, locker_entry.user_id, ESP_OK, "phone take completed");
     return true;
 }
 
 bool serve_request_debug_verify(void){
-    if (verify_debug == NULL){
-        return false;
-    }
-    return xSemaphoreGive(verify_debug) == pdTRUE;
+    ESP_LOGW(SERVE_TAG, "Debug verify requested but task removed");
+    return false;
 }
 
 void serve_get_save_status(serve_save_status_t *out){
-    if (out == NULL){
-        return;
-    }
+    if (out == NULL) return;
     memcpy(out, &g_save_status, sizeof(*out));
 }
 
 void serve_get_take_status(serve_take_status_t *out){
-    if (out == NULL){
-        return;
-    }
+    if (out == NULL) return;
     memcpy(out, &g_take_status, sizeof(*out));
+}
+
+/* ============== Admin API ============== */
+bool serve_admin_reset_xst(void){
+    return xst_cmd_reset() == MR_SUCCESS;
+}
+
+bool serve_admin_del_all_users(void){
+    return xst_cmd_del_all() == MR_SUCCESS;
+}
+
+int serve_admin_get_user_count(void){
+    uint16_t count = 0;
+    xst_result_t res = xst_cmd_get_user_count(&count);
+    return (res == MR_SUCCESS) ? (int)count : -1;
+}
+
+bool serve_admin_open_locker(uint8_t locker_id){
+    if (locker_id >= 4) return false;
+    locker_on(&lockers[locker_id]);
+    return true;
+}
+
+bool serve_admin_open_all_lockers(void){
+    locker_all_on();
+    return true;
+}
+
+bool serve_admin_verify_password(const char *input, uint8_t len){
+    if (input == NULL || len != 4) return false;
+    const char *admin_pwd = "1234";
+    return (input[0] == admin_pwd[0] && input[1] == admin_pwd[1] &&
+            input[2] == admin_pwd[2] && input[3] == admin_pwd[3]);
+}
+
+extern uint8_t g_xst_palm_progress;
+extern bool g_palm_progress_updated;
+extern uint8_t last_palm_progress;
+extern uint8_t last_save_progress;
+
+void serve_reset_palm_progress(void){
+    g_xst_palm_progress = 0;
+    g_palm_progress_updated = false;
+    last_palm_progress = 0;
+    last_save_progress = 0;
 }
 
 /* Private functions ---------------------------------------------------------*/
@@ -234,55 +279,33 @@ void ready_take_task(void* param){
 
             esp_err_t db_err = locker_db_get_entry_by_user(verified_user_id, &locker_entry);
             if (db_err != ESP_OK){
-                ESP_LOGW(SERVE_TAG, "No locker binding found for user_id=%u", verified_user_id);
+                ESP_LOGW(SERVE_TAG, "No locker binding found for user_id=%u, deleting orphaned user", verified_user_id);
                 if (g_buzzer_handle) buzzer_beep_pattern(g_buzzer_handle, BUZZER_BEEP_ERROR);
                 serve_take_status_set(SERVE_FLOW_FAILED, 0xFF, verified_user_id, db_err, "No locker binding found");
+                xst_cmd_del_user(verified_user_id);
                 continue;
             }
 
             if (locker_entry.locker_id >= 4){
                 ESP_LOGE(SERVE_TAG, "Invalid locker_id=%u for user_id=%u", locker_entry.locker_id, verified_user_id);
                 if (g_buzzer_handle) buzzer_beep_pattern(g_buzzer_handle, BUZZER_BEEP_ERROR);
-                serve_take_status_set(SERVE_FLOW_FAILED, locker_entry.locker_id, verified_user_id,
-                                      ESP_ERR_INVALID_STATE, "Invalid locker id");
+                serve_take_status_set(SERVE_FLOW_FAILED, locker_entry.locker_id, verified_user_id, ESP_ERR_INVALID_STATE, "Invalid locker id");
                 continue;
             }
 
             ESP_LOGI(SERVE_TAG, "Verify success for user_id=%u name=%s, opening locker %u",
-                     verified_user_id,
-                     verified_name,
-                     locker_entry.locker_id + 1);
-            locker_on(&lockers[locker_entry.locker_id]);
-            if (g_buzzer_handle) buzzer_beep_pattern(g_buzzer_handle, BUZZER_BEEP_SUCCESS);
-
-            xst_result_t del_res = xst_cmd_del_user(verified_user_id);
-            if (del_res != MR_SUCCESS){
-                ESP_LOGW(SERVE_TAG, "Locker opened but failed to delete user_id=%u from XST, res=%d; local locker binding will still be cleared",
-                         verified_user_id,
-                         del_res);
-            }
-
-            db_err = locker_db_remove_entry_by_locker(locker_entry.locker_id);
-            if (db_err != ESP_OK){
-                ESP_LOGE(SERVE_TAG, "Locker opened and XST user deleted, but failed to clear locker %u binding: %s",
-                         locker_entry.locker_id + 1,
-                         esp_err_to_name(db_err));
-                if (g_buzzer_handle) buzzer_beep_pattern(g_buzzer_handle, BUZZER_BEEP_ERROR);
-                serve_take_status_set(SERVE_FLOW_FAILED, locker_entry.locker_id, verified_user_id, db_err,
-                                      "Failed to clear binding");
+                     verified_user_id, verified_name, locker_entry.locker_id + 1);
+            esp_err_t release_err = serve_release_locker(locker_entry.locker_id, verified_user_id);
+            if (release_err != ESP_OK){
+                serve_take_status_set(SERVE_FLOW_FAILED, locker_entry.locker_id, verified_user_id, release_err, "Failed to clear binding");
                 continue;
             }
 
-            serve_take_status_set(SERVE_FLOW_SUCCESS,
-                                  locker_entry.locker_id,
-                                  verified_user_id,
-                                  (del_res == MR_SUCCESS) ? ESP_OK : ESP_FAIL,
-                                  (del_res == MR_SUCCESS) ? "palm take completed" : "palm take completed, XST delete warning");
+            serve_take_status_set(SERVE_FLOW_SUCCESS, locker_entry.locker_id, verified_user_id, ESP_OK, "palm take completed");
             ESP_LOGI(SERVE_TAG, "Take flow completed for user_id=%u, locker %u released",
-                     verified_user_id,
-                     locker_entry.locker_id + 1);
+                     verified_user_id, locker_entry.locker_id + 1);
         }
-        vTaskDelay(pdMS_TO_TICKS(200)); // 模拟取件处理时间
+        vTaskDelay(pdMS_TO_TICKS(200));
     }
 }
 
@@ -295,6 +318,21 @@ void ready_save_task(void* param){
             strncpy(g_save_status.message, "saving in progress", sizeof(g_save_status.message) - 1);
             g_save_status.message[sizeof(g_save_status.message) - 1] = '\0';
 
+            // 清理 XST 中无绑定的孤立用户，避免干扰掌纹识别
+            {
+                uint16_t ids[50] = {0};
+                uint16_t cnt = 0;
+                if (xst_cmd_get_all_user_ids(ids, 50, &cnt) == MR_SUCCESS){
+                    for (uint16_t i = 0; i < cnt; i++){
+                        user_locker_entry_t e;
+                        if (locker_db_get_entry_by_user(ids[i], &e) != ESP_OK){
+                            ESP_LOGW(SERVE_TAG, "Cleaning orphan XST user %u before enroll", ids[i]);
+                            xst_cmd_del_user(ids[i]);
+                        }
+                    }
+                }
+            }
+
             uint8_t locker_id = locker_db_find_free_locker();
             if (locker_id >= 4){
                 ESP_LOGW(SERVE_TAG, "No free locker available for save flow");
@@ -306,40 +344,30 @@ void ready_save_task(void* param){
             uint16_t new_user_id = 0;
             locker_t* target_locker = &lockers[locker_id];
 
-            // 重试机制：最多重试 3 次
             uint8_t retry_count = 0;
             xst_result_t enroll_res = MR_REJECTED;
 
             while (retry_count < 3 && enroll_res != MR_SUCCESS){
-                ESP_LOGI(SERVE_TAG, "Enroll attempt %u/3 for locker %d",
-                         retry_count + 1,
-                         target_locker->locker_id + 1);
+                ESP_LOGI(SERVE_TAG, "Enroll attempt %u/3 for locker %d", retry_count + 1, target_locker->locker_id + 1);
 
                 enroll_res = xst_cmd_enroll_single((const char*)target_locker->locker_info.locker_user_info,
-                                                   1,
-                                                   10,
-                                                   &new_user_id);
+                                                   1, 10, &new_user_id);
 
                 if (enroll_res == MR_SUCCESS){
                     ESP_LOGI(SERVE_TAG, "Enroll success for locker %d with user_id=%u",
-                             target_locker->locker_id + 1,
-                             new_user_id);
+                             target_locker->locker_id + 1, new_user_id);
                     target_locker->have_saved = true;
                     if (g_buzzer_handle) buzzer_beep_pattern(g_buzzer_handle, BUZZER_BEEP_SHORT);
                     break;
                 }
 
                 retry_count++;
-                if (retry_count < 3){
-                    // 重试前等待 1 秒
-                    vTaskDelay(pdMS_TO_TICKS(1000));
-                }
+                if (retry_count < 3) vTaskDelay(pdMS_TO_TICKS(1000));
             }
 
             if (enroll_res != MR_SUCCESS){
                 ESP_LOGE(SERVE_TAG, "Failed to enroll user for locker %d after 3 attempts, res=%d",
-                         target_locker->locker_id + 1,
-                         enroll_res);
+                         target_locker->locker_id + 1, enroll_res);
                 if (g_buzzer_handle) buzzer_beep_pattern(g_buzzer_handle, BUZZER_BEEP_ERROR);
                 serve_save_status_fail(ESP_FAIL, "Failed to enroll user (timeout)");
                 target_locker->have_saved = false;
@@ -358,12 +386,15 @@ void ready_save_task(void* param){
                 .is_valid = true,
             };
             memcpy(locker_entry.password, target_locker->password, sizeof(locker_entry.password));
+            if (g_has_pending_phone){
+                memcpy(locker_entry.phone, g_pending_phone, 4);
+                g_has_pending_phone = false;
+            }
 
             esp_err_t db_err = locker_db_add_entry(&locker_entry);
             if (db_err != ESP_OK){
                 ESP_LOGE(SERVE_TAG, "Failed to save locker binding for locker %d: %s",
-                         target_locker->locker_id + 1,
-                         esp_err_to_name(db_err));
+                         target_locker->locker_id + 1, esp_err_to_name(db_err));
                 if (g_buzzer_handle) buzzer_beep_pattern(g_buzzer_handle, BUZZER_BEEP_ERROR);
                 serve_save_status_fail(db_err, "Failed to persist binding");
                 xst_cmd_del_user(new_user_id);
@@ -374,14 +405,10 @@ void ready_save_task(void* param){
             memcpy(g_save_status.password, locker_entry.password, sizeof(g_save_status.password));
             g_save_status.has_password = true;
 
-            ESP_LOGI(SERVE_TAG,
-                     "Save flow success: user_id=%u locker=%u password=%d%d%d%d",
-                     new_user_id,
-                     target_locker->locker_id + 1,
-                     locker_entry.password[0],
-                     locker_entry.password[1],
-                     locker_entry.password[2],
-                     locker_entry.password[3]);
+            ESP_LOGI(SERVE_TAG, "Save flow success: user_id=%u locker=%u password=%d%d%d%d",
+                     new_user_id, target_locker->locker_id + 1,
+                     locker_entry.password[0], locker_entry.password[1],
+                     locker_entry.password[2], locker_entry.password[3]);
 
             vTaskDelay(pdMS_TO_TICKS(1000));
             locker_on(target_locker);
@@ -392,28 +419,5 @@ void ready_save_task(void* param){
             g_save_status.message[sizeof(g_save_status.message) - 1] = '\0';
         }
         vTaskDelay(pdMS_TO_TICKS(200));
-    }
-}
-
-void verify_debug_task(void* param){
-    while (1){
-        if (xSemaphoreTake(verify_debug, portMAX_DELAY) == pdTRUE){
-            ESP_LOGI(SERVE_TAG, "已收到测试识别信号量");
-            uint16_t* out_user_id = malloc(sizeof(uint16_t));
-            if (out_user_id == NULL){
-                ESP_LOGE(SERVE_TAG, "Failed to allocate memory for verify output");
-                if (out_user_id) free(out_user_id);
-                continue;
-            }
-            xst_cmd_enroll_single("debuger", 0, 10, out_user_id);
-            if (out_user_id[0] == 0){
-                ESP_LOGI(SERVE_TAG, "User id is 0");
-            }
-            else{
-                ESP_LOGI(SERVE_TAG, "User id is %d", *out_user_id);
-            }
-            free(out_user_id);
-        }
-        vTaskDelay(pdMS_TO_TICKS(100)); // 模拟取件处理时间
     }
 }

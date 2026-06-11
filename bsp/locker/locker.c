@@ -322,6 +322,23 @@ esp_err_t locker_db_get_entry_by_password(const uint8_t password[4], user_locker
 }
 
 /**
+ * 按 4 位手机号查找有效绑定条目
+ */
+esp_err_t locker_db_get_entry_by_phone(const uint8_t phone[4], user_locker_entry_t* entry){
+    if(phone == NULL || entry == NULL){
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    for(int i = 0; i < 4; i++){
+        if(user_locker_db[i].is_valid && memcmp(user_locker_db[i].phone, phone, 4) == 0){
+            memcpy(entry, &user_locker_db[i], sizeof(user_locker_entry_t));
+            return ESP_OK;
+        }
+    }
+    return ESP_ERR_NOT_FOUND;
+}
+
+/**
  * 按柜号清除绑定条目
  */
 esp_err_t locker_db_remove_entry_by_locker(uint8_t locker_id){

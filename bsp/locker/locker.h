@@ -41,7 +41,8 @@ typedef struct{
 typedef struct {
     uint16_t user_id;      // XST 用户ID
     uint8_t locker_id;     // 分配的柜号 0-3
-    uint8_t password[4];   // 4字节密码
+    uint8_t password[4];   // 4字节随机密码（保留）
+    uint8_t phone[4];      // 4位手机号
     uint32_t timestamp;    // 存件时间戳
     bool is_valid;         // 是否有效
 } user_locker_entry_t;
@@ -63,6 +64,7 @@ esp_err_t locker_db_add_entry(user_locker_entry_t* entry);  // 添加条目
 esp_err_t locker_db_get_entry_by_user(uint16_t user_id, user_locker_entry_t* entry);
 esp_err_t locker_db_get_entry_by_locker(uint8_t locker_id, user_locker_entry_t* entry);
 esp_err_t locker_db_get_entry_by_password(const uint8_t password[4], user_locker_entry_t* entry);
+esp_err_t locker_db_get_entry_by_phone(const uint8_t phone[4], user_locker_entry_t* entry);
 esp_err_t locker_db_remove_entry_by_locker(uint8_t locker_id);
 esp_err_t locker_db_clear_all(void);
 esp_err_t locker_db_sync_with_xst_users(const uint16_t* xst_user_ids, uint16_t xst_user_count);

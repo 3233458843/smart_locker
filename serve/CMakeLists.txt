@@ -1,6 +1,7 @@
 idf_component_register(
     SRCS
         "serve.c"
+        "locker_actions.c"
     INCLUDE_DIRS
         "."
     REQUIRES

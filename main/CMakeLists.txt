@@ -1,6 +1,8 @@
 idf_component_register(SRCS
                         "main.c"
-                    INCLUDE_DIRS 
+                        "network.c"
+                        "palm_progress.c"
+                    INCLUDE_DIRS
                         "."
                     REQUIRES
                         esp_timer

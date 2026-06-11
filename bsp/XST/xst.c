@@ -11,15 +11,13 @@
 
 int g_vofa_client_fd = -1;
 
-// 掌纹进度全局变量（由 main.c 定义，供 UI 实时显示）
-extern uint8_t g_xst_palm_progress;
-extern bool g_palm_progress_updated;
-
 // ---------------- 核心通信与任务同步资源 ----------------
 // 内部使用的命令回复队列 (供业务API阻塞等待结果)
 static QueueHandle_t xst_reply_queue = NULL;
 // 外部注册的主动通知回调函数
 static xst_note_callback_t g_note_callback = NULL;
+// 外部注册的录取进度回调函数
+static xst_progress_callback_t g_progress_callback = NULL;
 
 // 接收缓冲（滑动窗口解析用）
 #define PARSE_BUF_SIZE 4096
@@ -451,13 +449,17 @@ void xst_init(xst_note_callback_t callback){
     // 创建互斥锁保护链表
     xst_list_mutex = xSemaphoreCreateMutex();
 
-    xst_reply_queue = xQueueCreate(3, sizeof(queue_item_t));
+    xst_reply_queue = xQueueCreate(16, sizeof(queue_item_t));
 
     // 创建并行的接收任务和解析任务
     xTaskCreate(xst_uart_rx_task, "xst_rx", 4096, NULL, 15, NULL); // 优先级稍微高一点，保证收包实时性
     xTaskCreate(xst_parse_task, "xst_prs", 4096, NULL, 10, NULL); // 优先级稍微低一点，慢条斯理地解析
 
     ESP_LOGI(XST_TAG, "XST Driver Initialized with Dual-Task & Binary Semaphore System");
+}
+
+void xst_set_progress_callback(xst_progress_callback_t cb){
+    g_progress_callback = cb;
 }
 
 // 内部使用的事务处理封装
@@ -500,11 +502,11 @@ static xst_result_t xst_exec_cmd(uint8_t cmd, uint8_t* tx_data, uint16_t tx_len,
         ESP_LOGI(XST_TAG, "=> [xst_exec_cmd] 收到回复, body->mid=0x%02X, 期望cmd=0x%02X", body->mid, cmd);
 
         if (body->mid != cmd){
-            // ENROLL_PROGRESS 回复：提取进度值供 UI 实时显示
+            // ENROLL_PROGRESS 回复：通过回调通知上层进度
             if (body->mid == MID_ENROLL_PROGRESS && item.len >= 3){
-                g_xst_palm_progress = body->payload[0];
-                g_palm_progress_updated = true;
-                ESP_LOGI(XST_TAG, "=> [xst_exec_cmd] 录取进度更新: %d%%", g_xst_palm_progress);
+                uint8_t progress = body->payload[0];
+                if (g_progress_callback) g_progress_callback(progress);
+                ESP_LOGI(XST_TAG, "=> [xst_exec_cmd] 录取进度更新: %d%%", progress);
             } else {
                 ESP_LOGW(XST_TAG, "=> [xst_exec_cmd] 命令ID不匹配! 丢弃此回复并继续等待目标命令回复");
             }

@@ -46,7 +46,7 @@ void setup_scr_help_page(lv_ui *ui)
 
     //Write codes help_page_imgbtn_1
     ui->help_page_imgbtn_1 = lv_imagebutton_create(ui->help_page_cont_1);
-    lv_obj_set_pos(ui->help_page_imgbtn_1, 10, 9);
+    lv_obj_set_pos(ui->help_page_imgbtn_1, 10, 10);
     lv_obj_set_size(ui->help_page_imgbtn_1, 50, 50);
     lv_obj_add_flag(ui->help_page_imgbtn_1, LV_OBJ_FLAG_CHECKABLE);
     lv_imagebutton_set_src(ui->help_page_imgbtn_1, LV_IMAGEBUTTON_STATE_RELEASED, &_back_RGB565A8_50x50, NULL, NULL);

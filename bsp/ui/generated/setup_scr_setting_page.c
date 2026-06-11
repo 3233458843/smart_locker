@@ -31,6 +31,7 @@ void setup_scr_setting_page(lv_ui *ui)
     lv_obj_set_pos(ui->setting_page_cont_1, 0, 0);
     lv_obj_set_size(ui->setting_page_cont_1, 240, 320);
     lv_obj_set_scrollbar_mode(ui->setting_page_cont_1, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_add_flag(ui->setting_page_cont_1, LV_OBJ_FLAG_HIDDEN);
 
     //Write style for setting_page_cont_1, Part: LV_PART_MAIN, State: LV_STATE_DEFAULT.
     lv_obj_set_style_border_width(ui->setting_page_cont_1, 0, LV_PART_MAIN|LV_STATE_DEFAULT);
@@ -371,7 +372,6 @@ void setup_scr_setting_page(lv_ui *ui)
     lv_obj_set_pos(ui->setting_page_cont_2, 0, 0);
     lv_obj_set_size(ui->setting_page_cont_2, 240, 320);
     lv_obj_set_scrollbar_mode(ui->setting_page_cont_2, LV_SCROLLBAR_MODE_OFF);
-    lv_obj_add_flag(ui->setting_page_cont_2, LV_OBJ_FLAG_HIDDEN);
 
     //Write style for setting_page_cont_2, Part: LV_PART_MAIN, State: LV_STATE_DEFAULT.
     lv_obj_set_style_border_width(ui->setting_page_cont_2, 0, LV_PART_MAIN|LV_STATE_DEFAULT);

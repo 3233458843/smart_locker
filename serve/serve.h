@@ -1,19 +1,11 @@
 /**
  * @file      serve.h
- * @brief     ${USER_PROMPT}
- * @author    ${AUTHOR_NAME} (${AUTHOR_EMAIL})
- * @version   1.0
- * @date      2026-04-21
- * 
- * @copyright Copyright (c) 2026 All rights reserved.
- * 
- * @note      ${NOTE}
+ * @brief     Business service layer API
  */
 
 #ifndef _SERVE_H
 #define _SERVE_H
 
-/* Includes ------------------------------------------------------------------*/
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -24,18 +16,13 @@
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
 
-/* Type forward declarations -------------------------------------------------*/
 struct buzzer_handle_s;
 typedef struct buzzer_handle_s *buzzer_handle_t;
 
-/* C++ ------------------------------------------------------------*/
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* Exported macros -----------------------------------------------------------*/
-
-/* Exported types ------------------------------------------------------------*/
 typedef enum {
     SERVE_FLOW_IDLE = 0,
     SERVE_FLOW_PENDING,
@@ -62,27 +49,28 @@ typedef struct {
     char message[64];
 } serve_take_status_t;
 
-/* Exported variables --------------------------------------------------------*/
-extern SemaphoreHandle_t ready_save  ; // 通知能够进行存件
-extern SemaphoreHandle_t ready_take  ; // 通知能够进行取件
-extern SemaphoreHandle_t verify_debug  ; // 测试识别指令
+extern buzzer_handle_t g_buzzer_handle;
 
-extern  QueueHandle_t save_verify_process ;
-
-extern buzzer_handle_t g_buzzer_handle; // 蜂鸣器句柄，由 main.c 赋值
-
-extern uint16_t user_num[128] ; //
-/* Exported functions --------------------------------------------------------*/
 void serve_init(void);
-void serve_main(void);
 
 bool serve_request_save(void);
+bool serve_request_save_with_phone(const uint8_t phone[4]);
 bool serve_request_take_by_palm(void);
 bool serve_request_take_by_password(const uint8_t password[4]);
+bool serve_request_take_by_phone(const uint8_t phone[4]);
 bool serve_request_debug_verify(void);
 void serve_get_save_status(serve_save_status_t *out);
 void serve_get_take_status(serve_take_status_t *out);
-/* C++  ------------------------------------------------------------*/
+
+/* Admin/debug API — routes hardware ops through serve layer */
+bool serve_admin_reset_xst(void);
+bool serve_admin_del_all_users(void);
+int  serve_admin_get_user_count(void);
+bool serve_admin_open_locker(uint8_t locker_id);
+bool serve_admin_open_all_lockers(void);
+bool serve_admin_verify_password(const char *input, uint8_t len);
+void serve_reset_palm_progress(void);
+
 #ifdef __cplusplus
 }
 #endif

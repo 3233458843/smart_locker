@@ -65,6 +65,15 @@ typedef struct
 	lv_obj_t *save_page_label_1;
 	lv_obj_t *save_page_bar_1;
 	lv_obj_t *save_page_label_2;
+	lv_obj_t *save_page_cont_2;
+	lv_obj_t *save_page_imgbtn_2;
+	lv_obj_t *save_page_imgbtn_2_label;
+	lv_obj_t *save_page_label_3;
+	lv_obj_t *save_page_label_4;
+	lv_obj_t *save_page_label_5;
+	lv_obj_t *save_page_label_6;
+	lv_obj_t *save_page_label_7;
+	lv_obj_t *save_page_btnm_1;
 	lv_obj_t *help_page;
 	bool help_page_del;
 	lv_obj_t *help_page_cont_1;
@@ -201,6 +210,7 @@ LV_FONT_DECLARE(lv_font_Lemi_Little_Milk_Foam_Font_20)
 LV_FONT_DECLARE(lv_font_montserratMedium_16)
 LV_FONT_DECLARE(lv_font_Lemi_Little_Milk_Foam_Font_26)
 LV_FONT_DECLARE(lv_font_Lemi_Little_Milk_Foam_Font_16)
+LV_FONT_DECLARE(lv_font_Lemi_Little_Milk_Foam_Font_21)
 LV_FONT_DECLARE(lv_font_LXGWWenKaiMono_Medium_20)
 LV_FONT_DECLARE(lv_font_Lemi_Little_Milk_Foam_Font_33)
 
